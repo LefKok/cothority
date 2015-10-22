@@ -338,7 +338,7 @@ func (sn *Node) actOnCommits(view, Round int) error {
 	var err error
 
 	if sn.IsRoot(view) {
-		dbg.Lvl5("Commit root : Aggregate Public Key :", round.X_hat)
+		//dbg.Lvl5("Commit root : Aggregate Public Key :", round.X_hat)
 		//fmt.Println("Message is ", round.msg)
 		//if round.X_hat.Equal(sn.suite.Point().Null()) {
 		//	fmt.Println("Committt", round.X_hat)
