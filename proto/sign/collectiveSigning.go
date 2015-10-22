@@ -5,6 +5,7 @@ import (
 	"io"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/dedis/cothority/lib/coconet"
@@ -150,7 +151,7 @@ func (sn *Node) get() error {
 					err = sn.Respond(sm.View, sm.Rm.Round, sm)
 				}
 				if err != nil {
-					log.Errorln(sn.Name(), "response error:", err)
+					log.Errorln(sn.Name(), "response error from ", sm.From, " :", err)
 				}
 			case SignatureBroadcast:
 				sn.ReceivedHeartbeat(sm.View)
@@ -339,6 +340,9 @@ func (sn *Node) actOnCommits(view, Round int) error {
 
 	if sn.IsRoot(view) {
 		//dbg.Lvl5("Commit root : Aggregate Public Key :", round.X_hat)
+		//t := time.Now()
+		//dbg.Lvl5(round)
+		//dbg.Print("Time elapsed round printing : ", time.Since(t))
 		//fmt.Println("Message is ", round.msg)
 		//if round.X_hat.Equal(sn.suite.Point().Null()) {
 		//	fmt.Println("Committt", round.X_hat)
