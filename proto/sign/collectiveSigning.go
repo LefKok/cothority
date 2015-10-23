@@ -5,7 +5,7 @@ import (
 	"io"
 	"strconv"
 	"sync/atomic"
-	"time"
+//	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/dedis/cothority/lib/coconet"
@@ -13,6 +13,7 @@ import (
 	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/crypto/abstract"
 	"golang.org/x/net/context"
+	"runtime/debug"
 )
 
 // Collective Signing via ElGamal

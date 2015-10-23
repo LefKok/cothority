@@ -51,7 +51,7 @@ func (Sreq *StampRequest) UnmarshalBinary(data []byte) error {
 	return err
 }
 
-func (Srep StampReply) MarshalBinary() ([]byte, error) {
+func (Srep *StampReply) MarshalBinary() ([]byte, error) {
 	var b bytes.Buffer
 	enc := gob.NewEncoder(&b)
 	var err error
