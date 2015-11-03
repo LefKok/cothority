@@ -326,6 +326,7 @@ func (sn *Node) StartVotingRound(v *Vote) error {
 	if v.Vcv != nil && v.Vcv.View == 0 {
 		v.Vcv.View = sn.ViewNo + 1
 	}
+	// msg = 	sn.MessageRoundFunc())
 	return sn.StartAnnouncement(
 		&AnnouncementMessage{Message: []byte("vote round"), Round: sn.nRounds, Vote: v})
 }

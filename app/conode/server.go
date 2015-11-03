@@ -11,9 +11,9 @@ import (
 	log "github.com/Sirupsen/logrus"
 	dbg "github.com/dedis/cothority/lib/debug_lvl"
 
-	"github.com/dedis/cothority/lib/conode"
 	"github.com/dedis/cothority/lib/cliutils"
 	"github.com/dedis/cothority/lib/coconet"
+	"github.com/dedis/cothority/lib/conode"
 	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/cothority/lib/logutils"
 	"github.com/dedis/cothority/lib/proof"
@@ -204,7 +204,7 @@ func (s *Server) LogReRun(nextRole string, curRole string) {
 
 func (s *Server) runAsRoot(nRounds int) string {
 	// every 5 seconds start a new round
-	ticker := time.Tick(ROUND_TIME)
+	ticker := time.Tick(20 * ROUND_TIME)
 	if s.LastRound()+1 > nRounds && nRounds >= 0 {
 		dbg.Lvl1(s.Name(), "runAsRoot called with too large round number")
 		return "close"
@@ -231,6 +231,7 @@ func (s *Server) runAsRoot(nRounds int) string {
 				err = s.StartVotingRound(vote)
 			} else {
 				err = s.StartSigningRound()
+				//err = nil
 			}
 			if err == sign.ChangingViewError {
 				// report change in view, and continue with the select

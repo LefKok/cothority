@@ -20,4 +20,4 @@ cat $KEYS*.pub >> $HOSTLIST
 for a in $( seq 2 $NUMBER ); do
   ./conode run -key $KEYS$a &
 done
-./conode run -key ${KEYS}1
+./conode --debug 5 run -key ${KEYS}1

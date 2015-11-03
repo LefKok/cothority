@@ -11,13 +11,13 @@ mkdir $KEY_DIR
 
 for a in $( seq 1 $NUMBER ); do
   PORT=$(( 2000 + $a * 10 ))
-  ./conode keygen localhost:$PORT -key $KEYS$a
+  ./bitcosi keygen localhost:$PORT -key $KEYS$a
 done
 cat $KEYS*.pub >> $HOSTLIST
 
-./conode build $HOSTLIST
+./bitcosi build $HOSTLIST
 
 for a in $( seq 2 $NUMBER ); do
-  ./conode run -key $KEYS$a &
+  ./bitcosi run -key $KEYS$a &
 done
-./conode run -key ${KEYS}1
+./bitcosi --debug 5 run -key ${KEYS}1

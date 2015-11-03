@@ -3,17 +3,18 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"net"
 	"strconv"
 	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	dbg "github.com/dedis/cothority/lib/debug_lvl"
-
-	"github.com/dedis/cothority/lib/conode"
+	"github.com/dedis/cothority/lib/bitcosi"
+	"github.com/dedis/cothority/lib/bitcosi/blkparser"
 	"github.com/dedis/cothority/lib/cliutils"
 	"github.com/dedis/cothority/lib/coconet"
+	dbg "github.com/dedis/cothority/lib/debug_lvl"
 	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/cothority/lib/logutils"
 	"github.com/dedis/cothority/lib/proof"
@@ -25,8 +26,9 @@ import (
 // struct to ease keeping track of who requires a reply after
 // tsm is processed/ aggregated by the TSServer
 type MustReplyMessage struct {
-	Tsm conode.TimeStampMessage
-	To  string // name of reply destination
+	Tsm   BitCoSi.BitCoSiMessage
+	To    string // name of reply destination
+	Block BitCoSi.TrBlock
 }
 
 type Server struct {
@@ -34,11 +36,20 @@ type Server struct {
 	name    string
 	Clients map[string]coconet.Conn
 
-	// for aggregating messages from clients
+	// for aggregating blockrequests from clients
 	mux        sync.Mutex
 	Queue      [][]MustReplyMessage
 	READING    int
 	PROCESSING int
+
+	//transaction pool
+	trmux            sync.Mutex
+	transaction_pool []blkparser.Tx
+	IP               net.IP
+	PublicKey        string
+	Last_Block       string
+	bmux             sync.Mutex
+	blocks           []BitCoSi.TrBlock
 
 	// Leaves, Root and Proof for a round
 	Leaves []hashid.HashId // can be removed after we verify protocol
@@ -63,6 +74,12 @@ func NewServer(signer sign.Signer) *Server {
 	s.Queue = make([][]MustReplyMessage, 2)
 	s.READING = 0
 	s.PROCESSING = 1
+
+	s.IP = net.IPv4(0, 1, 2, 3)
+	s.PublicKey = "my_cool_key"
+	s.Last_Block = "0"
+	s.transaction_pool = make([]blkparser.Tx, 0)
+	s.blocks = make([]BitCoSi.TrBlock, 0)
 
 	s.Signer = signer
 	s.Signer.RegisterAnnounceFunc(s.AnnounceFunc())
@@ -123,9 +140,9 @@ func (s *Server) Listen() error {
 
 				go func(co coconet.Conn) {
 					for {
-						tsm := conode.TimeStampMessage{}
+						tsm := BitCoSi.BitCoSiMessage{}
 						err := co.GetData(&tsm)
-						dbg.Lvl2("Got data to sign %+v - %+v", tsm, tsm.Sreq)
+						dbg.Lvl2("Got data to sign %+v - %+v", tsm, tsm.Treq)
 						if err != nil {
 							dbg.Lvlf1("%p Failed to get from child: %s", s, err)
 							co.Close()
@@ -134,17 +151,24 @@ func (s *Server) Listen() error {
 						switch tsm.Type {
 						default:
 							dbg.Lvlf1("Message of unknown type: %v\n", tsm.Type)
-						case conode.StampRequestType:
+						case BitCoSi.BlockRequestType:
 							s.mux.Lock()
+							dbg.Lvlf1("BlockRequest: %v\n", tsm.Type)
 							READING := s.READING
 							s.Queue[READING] = append(s.Queue[READING],
 								MustReplyMessage{Tsm: tsm, To: co.Name()})
 							s.mux.Unlock()
-						case conode.StampClose:
+
+						case BitCoSi.TransactionAnnouncmentType:
+							s.trmux.Lock()
+							s.transaction_pool = append(s.transaction_pool, tsm.Treq.Val)
+							s.trmux.Unlock()
+
+						case BitCoSi.BitCoSiClose:
 							dbg.Lvl2("Closing connection")
 							co.Close()
 							return
-						case conode.StampExit:
+						case BitCoSi.BitCoSiExit:
 							dbg.Lvl1("Exiting server upon request")
 							os.Exit(-1)
 						}
@@ -202,6 +226,21 @@ func (s *Server) LogReRun(nextRole string, curRole string) {
 
 }
 
+func getblock(s *Server, n int) (_ BitCoSi.TrBlock, _ error) {
+	if len(s.transaction_pool) > 0 {
+
+		trlist := BitCoSi.NewTransactionList(s.transaction_pool, n)
+		header := BitCoSi.NewHeader(trlist, s.Last_Block, s.IP, s.PublicKey)
+		trblock := BitCoSi.NewTrBlock(trlist, header)
+		s.transaction_pool = s.transaction_pool[trblock.TransactionList.TxCnt:]
+		s.Last_Block = trblock.HeaderHash
+		return trblock, nil
+	} else {
+		return *new(BitCoSi.TrBlock), errors.New("no transaction available")
+	}
+
+}
+
 func (s *Server) runAsRoot(nRounds int) string {
 	// every 5 seconds start a new round
 	ticker := time.Tick(ROUND_TIME)
@@ -230,6 +269,25 @@ func (s *Server) runAsRoot(nRounds int) string {
 						Name:   "test-add-node"}}
 				err = s.StartVotingRound(vote)
 			} else {
+				//signingNode = s.Signer.(sign.Node)
+				//signingNode.BroadcastBLock(block)
+				//signingNode.ReceiveACKBlock()
+
+				s.trmux.Lock()
+				trblock, err := getblock(s, 10)
+				s.trmux.Unlock()
+
+				if err != nil {
+					//dbg.Lvl3(err)
+					time.Sleep(1 * time.Second)
+					break
+				}
+
+				s.bmux.Lock()
+				s.blocks = append(s.blocks, trblock)
+				s.bmux.Unlock()
+				//s.blocks[0].Print()
+
 				err = s.StartSigningRound()
 			}
 			if err == sign.ChangingViewError {
@@ -280,7 +338,7 @@ func (s *Server) Run(role string) {
 	go func() { err := s.Signer.Listen(); closed <- true; s.Close(); log.Error(err) }()
 	s.rLock.Lock()
 
-	// TODO: remove this hack
+	// TO/DO: remove this hack
 	s.maxRounds = -1
 	s.rLock.Unlock()
 
@@ -316,6 +374,8 @@ func (s *Server) Run(role string) {
 // AnnounceFunc will keep the timestamp generated for this round
 func (s *Server) AnnounceFunc() sign.AnnounceFunc {
 	return func(am *sign.AnnouncementMessage) {
+		dbg.Lvl1("Anounce")
+
 		var t int64
 		if err := binary.Read(bytes.NewBuffer(am.Message), binary.LittleEndian, &t); err != nil {
 			dbg.Lvl1("Unmashaling timestamp has failed")
@@ -324,9 +384,17 @@ func (s *Server) AnnounceFunc() sign.AnnounceFunc {
 	}
 }
 
+/*
+func (s *Server) RoundMessageFunc() sign.RoundMessageFunc {
+	return func(view int) []byte {
+		hash(s.blocks())
+	}
+}
+*/
+
 func (s *Server) CommitFunc() sign.CommitFunc {
 	return func(view int) []byte {
-		//dbg.Lvl4("Aggregating Commits")
+		dbg.Lvl4("Aggregating Commits")
 		return s.AggregateCommits(view)
 	}
 }
@@ -335,28 +403,40 @@ func (s *Server) OnDone() sign.DoneFunc {
 	return func(view int, SNRoot hashid.HashId, LogHash hashid.HashId, p proof.Proof,
 		sb *sign.SignatureBroadcastMessage, suite abstract.Suite) {
 		s.mux.Lock()
-		for i, msg := range s.Queue[s.PROCESSING] {
+		for _, msg := range s.Queue[s.PROCESSING] {
+			dbg.Lvlf5("%+v", msg)
 			// proof to get from s.Root to big root
 			combProof := make(proof.Proof, len(p))
 			copy(combProof, p)
 
 			// add my proof to get from a leaf message to my root s.Root
-			combProof = append(combProof, s.Proofs[i]...)
+			combProof = append(combProof, s.Proofs[0]...)
 
 			// proof that I can get from a leaf message to the big root
-			if proof.CheckProof(s.Signer.(*sign.Node).Suite().Hash, SNRoot, s.Leaves[i], combProof) {
+			if proof.CheckProof(s.Signer.(*sign.Node).Suite().Hash, SNRoot, s.Leaves[0], combProof) {
 				dbg.Lvl2("Proof is OK")
 			} else {
 				dbg.Lvl2("Inclusion-proof failed")
 			}
 
-			respMessg := &conode.TimeStampMessage{
-				Type:  conode.StampReplyType,
+			s.bmux.Lock()
+
+			respMessg := &BitCoSi.BitCoSiMessage{
+				Type:  BitCoSi.BlockReplyType,
 				ReqNo: msg.Tsm.ReqNo,
-				Srep:  &conode.StampReply{SuiteStr: suite.String(), Timestamp: s.Timestamp, MerkleRoot: SNRoot, Prf: combProof, SigBroad: *sb}}
+				Brep:  &BitCoSi.BlockReply{SuiteStr: suite.String(), Timestamp: s.Timestamp, Block: s.blocks[0], MerkleRoot: SNRoot, Prf: combProof, SigBroad: *sb}}
 			s.PutToClient(msg.To, respMessg)
 			dbg.Lvl1("Sent signature response back to client")
+			s.bmux.Unlock()
+
 		}
+		s.bmux.Lock()
+
+		if len(s.blocks) > 0 {
+			s.blocks = s.blocks[1:]
+		}
+		s.bmux.Unlock()
+
 		s.mux.Unlock()
 		s.Timestamp = 0
 	}
@@ -385,9 +465,12 @@ func (s *Server) AggregateCommits(view int) []byte {
 
 	// pull out to be Merkle Tree leaves
 	s.Leaves = make([]hashid.HashId, 0)
+	s.bmux.Lock()
 	for _, msg := range Queue[PROCESSING] {
-		s.Leaves = append(s.Leaves, hashid.HashId(msg.Tsm.Sreq.Val))
+		msg.Block = s.blocks[0]
 	}
+	s.Leaves = append(s.Leaves, hashid.HashId(s.blocks[0].HeaderHash))
+	s.bmux.Unlock()
 	s.mux.Unlock()
 
 	// non root servers keep track of rounds here
