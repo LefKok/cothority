@@ -4,11 +4,19 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/dedis/cothority/lib/bitcosi/blkparser"
 	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/cothority/lib/proof"
 	"log"
 	"net"
 )
+
+type Block interface {
+	calculate_root()
+	hash()
+	NewBlock()
+	NewHeader()
+}
 
 type TrBlock struct {
 	Magic      [4]byte
@@ -22,29 +30,31 @@ type Header struct {
 	LeaderId   net.IP
 	PublicKey  string
 	MerkleRoot string
-	Parent     string
+	ParentKey  string
+	ParentTr   string
 }
 
-func NewTrBlock(transactions TransactionList, header Header) (tr TrBlock) {
+func (*TrBlock) NewBlock(transactions []blkparser.Tx, n int, parent_tr string, parent_key string, IP net.IP, key string) (tr TrBlock) {
 	trb := new(TrBlock)
 	trb.Magic = [4]byte{0xF9, 0xBE, 0xB4, 0xD9}
-	trb.HeaderHash = hash(header)
-	trb.TransactionList = transactions
+	trb.TransactionList = NewTransactionList(transactions, n)
+	trb.Header = trb.NewHeader(trb.TransactionList, parent_tr, parent_key, IP, key)
+	trb.HeaderHash = trb.hash(trb.Header)
 	trb.BlockSize = 0
-	trb.Header = header
 	return *trb
 }
 
-func NewHeader(transactions TransactionList, parent string, IP net.IP, key string) (hd Header) {
+func (t *TrBlock) NewHeader(transactions TransactionList, parent_tr string, parent_key string, IP net.IP, key string) (hd Header) {
 	hdr := new(Header)
 	hdr.LeaderId = IP
 	hdr.PublicKey = key
-	hdr.Parent = parent
-	hdr.MerkleRoot = calculate_root(transactions)
+	hdr.ParentTr = parent_tr
+	hdr.ParentKey = parent_key
+	hdr.MerkleRoot = t.calculate_root(transactions)
 	return *hdr
 }
 
-func calculate_root(transactions TransactionList) (res string) {
+func (t *TrBlock) calculate_root(transactions TransactionList) (res string) {
 	var hashes []hashid.HashId
 
 	for _, t := range transactions.Txs {
@@ -56,7 +66,7 @@ func calculate_root(transactions TransactionList) (res string) {
 	return
 }
 
-func hash(h Header) (res string) {
+func (t *TrBlock) hash(h Header) (res string) {
 	//change it to be more portable
 	data := fmt.Sprintf("%v", h)
 	sha := sha256.New()
@@ -71,7 +81,8 @@ func (trb *TrBlock) Print() {
 	log.Println("Header:")
 	log.Printf("Leader %v", trb.LeaderId)
 	log.Printf("Pkey %v", trb.PublicKey)
-	log.Printf("Parent %v", trb.Parent)
+	log.Printf("Parent_Tr %v", trb.ParentTr)
+	log.Printf("Parent_Key %v", trb.ParentKey)
 	log.Printf("Merkle %v", trb.MerkleRoot)
 	trb.TransactionList.Print()
 

@@ -20,4 +20,4 @@ cat $KEYS*.pub >> $HOSTLIST
 for a in $( seq 2 $NUMBER ); do
   ./bitcosi run -key $KEYS$a &
 done
-./bitcosi --debug 5 run -key ${KEYS}1
+./bitcosi -debug 3 run -key ${KEYS}1

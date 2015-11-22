@@ -47,7 +47,8 @@ type Server struct {
 	transaction_pool []blkparser.Tx
 	IP               net.IP
 	PublicKey        string
-	Last_Block       string
+	Last_Tr_Block    string
+	Last_Key_Block   string
 	bmux             sync.Mutex
 	blocks           []BitCoSi.TrBlock
 
@@ -77,7 +78,8 @@ func NewServer(signer sign.Signer) *Server {
 
 	s.IP = net.IPv4(0, 1, 2, 3)
 	s.PublicKey = "my_cool_key"
-	s.Last_Block = "0"
+	s.Last_Tr_Block = "0"
+	s.Last_Key_Block = "0"
 	s.transaction_pool = make([]blkparser.Tx, 0)
 	s.blocks = make([]BitCoSi.TrBlock, 0)
 
@@ -226,14 +228,11 @@ func (s *Server) LogReRun(nextRole string, curRole string) {
 
 }
 
-func getblock(s *Server, n int) (_ BitCoSi.TrBlock, _ error) {
+func getblock(s *Server, n int) (t BitCoSi.TrBlock, _ error) {
 	if len(s.transaction_pool) > 0 {
-
-		trlist := BitCoSi.NewTransactionList(s.transaction_pool, n)
-		header := BitCoSi.NewHeader(trlist, s.Last_Block, s.IP, s.PublicKey)
-		trblock := BitCoSi.NewTrBlock(trlist, header)
+		trblock := t.NewBlock(s.transaction_pool, n, s.Last_Tr_Block, s.Last_Key_Block, s.IP, s.PublicKey)
 		s.transaction_pool = s.transaction_pool[trblock.TransactionList.TxCnt:]
-		s.Last_Block = trblock.HeaderHash
+		s.Last_Tr_Block = trblock.HeaderHash
 		return trblock, nil
 	} else {
 		return *new(BitCoSi.TrBlock), errors.New("no transaction available")
@@ -243,7 +242,7 @@ func getblock(s *Server, n int) (_ BitCoSi.TrBlock, _ error) {
 
 func (s *Server) runAsRoot(nRounds int) string {
 	// every 5 seconds start a new round
-	ticker := time.Tick(ROUND_TIME)
+	ticker := time.Tick(4 * ROUND_TIME)
 	if s.LastRound()+1 > nRounds && nRounds >= 0 {
 		dbg.Lvl1(s.Name(), "runAsRoot called with too large round number")
 		return "close"
