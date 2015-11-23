@@ -1,25 +1,36 @@
 package conode
+
 import (
-	dbg "github.com/dedis/cothority/lib/debug_lvl"
-	"github.com/dedis/crypto/abstract"
-	"github.com/dedis/cothority/lib/hashid"
 	"bytes"
 	"encoding/binary"
-	"github.com/dedis/cothority/lib/proof"
 	"errors"
+	"github.com/dedis/cothority/lib/dbg"
+	"github.com/dedis/cothority/lib/hashid"
+	"github.com/dedis/cothority/lib/proof"
+	"github.com/dedis/crypto/abstract"
 )
+
+/*
+Verification methods used by stamper.
+ */
 
 // Verifies that the 'message' is included in the signature and that it
 // is correct.
 // Message is your own hash, and reply contains the inclusion proof + signature
 // on the aggregated message
-func VerifySignature(suite abstract.Suite, reply *StampReply, public abstract.Point, message []byte) bool {
+func VerifySignature(suite abstract.Suite, reply *StampSignature, public abstract.Point, message []byte) bool {
+	// Check if aggregate public key is correct
+	if !public.Equal(reply.AggPublic) {
+		dbg.Lvl1("Aggregate-public-key check : FAILED (maybe you have an outdated config file of the tree)")
+		return false
+	}
 	// First check if the challenge is ok
 	if err := VerifyChallenge(suite, reply); err != nil {
 		dbg.Lvl1("Challenge-check : FAILED (", err, ")")
 		return false
 	}
 	dbg.Lvl2("Challenge-check : OK")
+
 	// Incorporate the timestamp in the message since the verification process
 	// is done by reconstructing the challenge
 	var b bytes.Buffer
@@ -28,7 +39,7 @@ func VerifySignature(suite abstract.Suite, reply *StampReply, public abstract.Po
 		return false
 	}
 	msg := append(b.Bytes(), []byte(reply.MerkleRoot)...)
-	if err := VerifySchnorr(suite, msg, public, reply.SigBroad.C, reply.SigBroad.R0_hat); err != nil {
+	if err := VerifySchnorr(suite, msg, public, reply.Challenge, reply.Response); err != nil {
 		dbg.Lvl1("Signature-check : FAILED (", err, ")")
 		return false
 	}
@@ -46,10 +57,9 @@ func VerifySignature(suite abstract.Suite, reply *StampReply, public abstract.Po
 // verifyChallenge will reconstruct the challenge in order to see if any of the
 // components of the challenge has been spoofed or not. It may be a different
 // timestamp .
-func VerifyChallenge(suite abstract.Suite, reply *StampReply) error {
-
+func VerifyChallenge(suite abstract.Suite, reply *StampSignature) error {
 	// marshal the V
-	pbuf, err := reply.SigBroad.V0_hat.MarshalBinary()
+	pbuf, err := reply.AggCommit.MarshalBinary()
 	if err != nil {
 		return err
 	}
@@ -62,14 +72,13 @@ func VerifyChallenge(suite abstract.Suite, reply *StampReply) error {
 	cbuf := append(b.Bytes(), reply.MerkleRoot...)
 	c.Message(nil, nil, cbuf)
 	challenge := suite.Secret().Pick(c)
-	dbg.Lvlf3("challenge: %+v", challenge)
-	if challenge.Equal(reply.SigBroad.C) {
+	if challenge.Equal(reply.Challenge) {
 		return nil
 	}
 	return errors.New("Challenge reconstructed is not equal to the one given ><")
 }
 
-// A simple verification of a schnorr signature given the message
+// A simple verification of a Schnorr signature given the message
 func VerifySchnorr(suite abstract.Suite, message []byte, publicKey abstract.Point, c, r abstract.Secret) error {
 
 	// Check that: base**r_hat * X_hat**c == V_hat
@@ -93,4 +102,3 @@ func VerifySchnorr(suite abstract.Suite, message []byte, publicKey abstract.Poin
 	}
 	return nil
 }
-

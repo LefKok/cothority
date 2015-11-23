@@ -12,9 +12,8 @@ import (
 	"regexp"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
-	dbg "github.com/dedis/cothority/lib/debug_lvl"
-	"github.com/dedis/cothority/proto/sign"
+	"github.com/dedis/cothority/lib/dbg"
+	"github.com/dedis/cothority/lib/sign"
 
 	"github.com/dedis/cothority/lib/coconet"
 	"github.com/dedis/crypto/abstract"
@@ -46,13 +45,6 @@ ex.json
 */
 
 type JSONPoint json.RawMessage
-
-type Node struct {
-	Name     string  `json:"name"`
-	PriKey   string  `json:"prikey,omitempty"`
-	PubKey   string  `json:"pubkey,omitempty"`
-	Children []*Node `json:"children,omitempty"`
-}
 
 // HostConfig stores all of the relevant information of the configuration file.
 type HostConfig struct {
@@ -88,8 +80,8 @@ func (hc *HostConfig) String() string {
 	bformatted := bytes.NewBuffer([]byte{})
 	err := json.Indent(bformatted, b.Bytes(), "", "\t")
 	if err != nil {
-		fmt.Println(string(b.Bytes()))
-		fmt.Println("ERROR: ", err)
+		dbg.Lvl3(string(b.Bytes()))
+		dbg.Lvl3("ERROR: ", err)
 	}
 
 	return string(bformatted.Bytes())
@@ -102,9 +94,9 @@ func writeHC(b *bytes.Buffer, hc *HostConfig, p *sign.Node) error {
 	}
 	prk, _ := p.PrivKey.MarshalBinary()
 	pbk, _ := p.PubKey.MarshalBinary()
-	fmt.Fprint(b, "{\"name\":", "\""+p.Name()+"\",")
-	fmt.Fprint(b, "\"prikey\":", "\""+string(hex.EncodeToString(prk))+"\",")
-	fmt.Fprint(b, "\"pubkey\":", "\""+string(hex.EncodeToString(pbk))+"\",")
+	fmt.Fprint(b, "{\"name\":", "\"" + p.Name() + "\",")
+	fmt.Fprint(b, "\"prikey\":", "\"" + string(hex.EncodeToString(prk)) + "\",")
+	fmt.Fprint(b, "\"pubkey\":", "\"" + string(hex.EncodeToString(pbk)) + "\",")
 
 	// recursively format children
 	fmt.Fprint(b, "\"children\":[")
@@ -148,20 +140,20 @@ func max(a, b int) int {
 // config file. ConstructTree must be called AFTER populating the HostConfig with
 // ALL the possible hosts.
 func ConstructTree(
-	node *Tree,
-	hc *HostConfig,
-	parent string,
-	suite abstract.Suite,
-	rand cipher.Stream,
-	hosts map[string]coconet.Host,
-	nameToAddr map[string]string,
-	opts ConfigOptions) (int, error) {
+node *Tree,
+hc *HostConfig,
+parent string,
+suite abstract.Suite,
+rand cipher.Stream,
+hosts map[string]coconet.Host,
+nameToAddr map[string]string,
+opts ConfigOptions) (int, error) {
 	// passes up its X_hat, and/or an error
 
 	// get the name associated with this address
 	name, ok := nameToAddr[node.Name]
 	if !ok {
-		fmt.Println("unknown name in address book:", node.Name)
+		dbg.Lvl3("unknown name in address book:", node.Name)
 		return 0, errors.New("unknown name in address book")
 	}
 
@@ -174,7 +166,7 @@ func ConstructTree(
 	// it can be backed by a nil pointer
 	h, ok := hosts[name]
 	if !ok {
-		fmt.Println("unknown host in tree:", name)
+		dbg.Lvl3("unknown host in tree:", name)
 		return 0, errors.New("unknown host in tree")
 	}
 
@@ -187,13 +179,13 @@ func ConstructTree(
 		// dbg.Lvl4("decoding point")
 		encoded, err := hex.DecodeString(string(node.PubKey))
 		if err != nil {
-			log.Error("failed to decode hex from encoded")
+			dbg.Error("failed to decode hex from encoded")
 			return 0, err
 		}
 		pubkey = suite.Point()
 		err = pubkey.UnmarshalBinary(encoded)
 		if err != nil {
-			log.Error("failed to decode point from hex")
+			dbg.Error("failed to decode point from hex")
 			return 0, err
 		}
 	}
@@ -201,13 +193,13 @@ func ConstructTree(
 		// dbg.Lvl4("decoding point")
 		encoded, err := hex.DecodeString(string(node.PriKey))
 		if err != nil {
-			log.Error("failed to decode hex from encoded")
+			dbg.Error("failed to decode hex from encoded")
 			return 0, err
 		}
 		prikey = suite.Secret()
 		err = prikey.UnmarshalBinary(encoded)
 		if err != nil {
-			log.Error("failed to decode point from hex")
+			dbg.Error("failed to decode point from hex")
 			return 0, err
 		}
 	}
@@ -226,7 +218,7 @@ func ConstructTree(
 			hc.SNodes = append(hc.SNodes, sn)
 			h.SetPubKey(sn.PubKey)
 		}
-		sn = hc.SNodes[len(hc.SNodes)-1]
+		sn = hc.SNodes[len(hc.SNodes) - 1]
 		hc.Hosts[name] = sn
 		if prikey == nil {
 			prikey = sn.PrivKey
@@ -249,7 +241,7 @@ func ConstructTree(
 		// connect this node to its children
 		cname, ok := nameToAddr[c.Name]
 		if !ok {
-			fmt.Println("unknown name in address book:", node.Name)
+			dbg.Lvl3("unknown name in address book:", node.Name)
 			return 0, errors.New("unknown name in address book")
 		}
 
@@ -265,7 +257,7 @@ func ConstructTree(
 		if err != nil {
 			return 0, err
 		}
-		height = max(h+1, height)
+		height = max(h + 1, height)
 		// if generating all csn will be availible
 	}
 	if generate {
@@ -285,7 +277,7 @@ var ipv4host = "NONE"
 func GetAddress() (string, error) {
 	name, err := os.Hostname()
 	if err != nil {
-		log.Error("Error Resolving Hostname:", err)
+		dbg.Error("Error Resolving Hostname:", err)
 		return "", err
 	}
 
@@ -324,72 +316,49 @@ type ConfigOptions struct {
 	Faulty    bool           // if true, use FaultyHost wrapper around Hosts
 	Suite     abstract.Suite // suite to use for Hosts
 	NoTree    bool           // bool flag to tell wether we want to construct
-	// the tree or not. Setting this to false will
-	// construct the tree. True will not.
+							 // the tree or not. Setting this to false will
+							 // construct the tree. True will not.
 }
 
 // run the given hostnames
-func (hc *HostConfig) Run(stamper bool, signType sign.Type, hostnameSlice ...string) error {
-	dbg.Lvl3(hc.Hosts, "going to connect everything for", hostnameSlice)
-	hostnames := make(map[string]*sign.Node)
-	if hostnameSlice == nil {
-		hostnames = hc.Hosts
+func (hc *HostConfig) Run(stamper bool, signType sign.Type, hostname string) error {
+	dbg.Lvl3(hc.Hosts, "going to connect everything for", hostname)
+	node := hc.Hosts[hostname]
+
+	node.Type = signType
+	dbg.Lvl3("Listening on", node.Host)
+	node.Host.Listen()
+
+	var err error
+	// exponential backoff for attempting to connect to parent
+	startTime := time.Duration(200)
+	maxTime := time.Duration(2000)
+	for i := 0; i < 2000; i++ {
+		dbg.Lvl3(hostname, "attempting to connect to parent")
+		// the host should connect with the parent
+		err = node.Connect(0)
+		if err == nil {
+			// log.Infoln("hostconfig: connected to parent:")
+			break
+		}
+
+		time.Sleep(startTime * time.Millisecond)
+		startTime *= 2
+		if startTime > maxTime {
+			startTime = maxTime
+		}
+	}
+	if err != nil {
+		dbg.Fatal(hostname, "failed to connect to parent")
+		//return errors.New("failed to connect")
 	} else {
-		for _, h := range hostnameSlice {
-			sn, ok := hc.Hosts[h]
-			if !ok {
-				return errors.New("hostname given not in config file:" + h)
-			}
-			hostnames[h] = sn
-		}
+		dbg.Lvl3(hostname, "successfully connected to parent")
 	}
-
-	// set all hosts to be listening - open the port and connect to the channel
-	for _, sn := range hostnames {
-		sn.Type = signType
-		dbg.Lvl3("Listening on", sn.Host)
-		sn.Host.Listen()
-	}
-
-	for h, sn := range hostnames {
-		var err error
-		// exponential backoff for attempting to connect to parent
-		startTime := time.Duration(200)
-		maxTime := time.Duration(2000)
-		for i := 0; i < 2000; i++ {
-			dbg.Lvl3(h, "attempting to connect to parent")
-			// the host should connect with the parent
-			err = sn.Connect(0)
-			if err == nil {
-				// log.Infoln("hostconfig: connected to parent:")
-				break
-			}
-
-			time.Sleep(startTime * time.Millisecond)
-			startTime *= 2
-			if startTime > maxTime {
-				startTime = maxTime
-			}
-		}
-		if err != nil {
-			log.Fatal(fmt.Sprintf("%s failed to connect to parent"), h)
-			//return errors.New("failed to connect")
-		} else {
-			dbg.Lvl3(fmt.Sprintf("Successfully connected to parent %s", h))
-		}
-	}
-
-	// need to make sure network connections are setup properly first
-	// wait for a little bit for connections to establish fully
-	// get rid of waits they hide true bugs
-	// time.Sleep(1000 * time.Millisecond)
 
 	if !stamper {
 		// This will call the dispatcher in collectiveSigning for every request
-		dbg.Lvl4("Starting to listen for incoming stamp-requests on", hostnames)
-		for _, sn := range hostnames {
-			go sn.Listen()
-		}
+		dbg.Lvl4("Starting to listen for incoming stamp-requests on", hostname)
+		node.Listen()
 	}
 
 	return nil
@@ -485,7 +454,7 @@ func LoadConfig(appHosts []string, appTree *Tree, suite abstract.Suite, optsSlic
 	//suite := edwards.NewAES128SHA256Ed25519(true)
 	//suite := nist.NewAES128SHA256P256()
 	rand := suite.Cipher([]byte("example"))
-	//fmt.Println("hosts", hosts)
+	//dbg.Lvl3("hosts", hosts)
 	// default value = false
 	start := time.Now()
 	if opts.NoTree == false {

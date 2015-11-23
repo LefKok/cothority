@@ -2,11 +2,10 @@ package main
 
 import (
 	"github.com/dedis/cothority/lib/app"
-	dbg "github.com/dedis/cothority/lib/debug_lvl"
+	"github.com/dedis/cothority/lib/dbg"
 	"github.com/dedis/cothority/lib/graphs"
-	"github.com/dedis/cothority/proto/sign"
+	"github.com/dedis/cothority/lib/sign"
 	"io/ioutil"
-	"log"
 	"os"
 	"time"
 )
@@ -18,7 +17,7 @@ func main() {
 
 	// we must know who we are
 	if app.RunFlags.Hostname == "" {
-		log.Fatal("Hostname empty : Abort")
+		dbg.Fatal("Hostname empty : Abort")
 	}
 
 	// Do some common setup
@@ -30,12 +29,9 @@ func main() {
 		dbg.Lvlf3("Tree is %+v", conf.Tree.String(0))
 	}
 	dbg.Lvl3(app.RunFlags.Hostname, "Starting to run")
-	if conf.Debug > 1 {
-		sign.DEBUG = true
-	}
 
 	if hostname == "" {
-		log.Fatal("no hostname given", hostname)
+		dbg.Fatal("no hostname given", hostname)
 	}
 
 	// load the configuration
@@ -49,7 +45,7 @@ func main() {
 	}
 	hc, err = graphs.LoadConfig(conf.Hosts, conf.Tree, s, opts)
 	if err != nil {
-		log.Fatal(err)
+		dbg.Fatal(err)
 	}
 
 	// Wait for everybody to be ready before going on
@@ -64,7 +60,7 @@ func main() {
 			break
 		}
 	}
-	dbg.Lvl2(hostname, "thinks everybody's here")
+	dbg.Lvl3(hostname, "thinks everybody's here")
 
 	// set FailureRates
 	if conf.Failures > 0 {
@@ -88,9 +84,9 @@ func main() {
 
 	switch app.RunFlags.Mode {
 	case "client":
-		log.Panic("No client mode")
+		dbg.Panic("No client mode")
 	case "server":
 		RunServer(conf, hc)
 	}
-	dbg.Lvl2("Collective Signing", hostname, "has terminated in mode", app.RunFlags.Mode)
+	dbg.Lvl3("Collective Signing", hostname, "has terminated in mode", app.RunFlags.Mode)
 }
