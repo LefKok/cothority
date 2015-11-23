@@ -22,7 +22,8 @@ const (
 	Error MessageType = iota
 	TransactionAnnouncmentType
 	BlockReplyType
-	BlockRequestType
+	KeyBlockRequestType
+	TrBlockRequestType
 	BitCoSiClose
 	BitCoSiExit
 )
@@ -38,7 +39,8 @@ type BlockReply struct {
 	SuiteStr   string
 	Timestamp  int64                          // The timestamp requested for the block to prove its ordering
 	BlockLen   int                            // Length of Block
-	Block      TrBlock                        // The Block including a number of transactions
+	TrBlock    TrBlock                        // The Block including a number of transactions
+	KeyBlock   KeyBlock                       // The Block including a number of transactions
 	MerkleRoot []byte                         // root of the merkle tree
 	PrfLen     int                            // Length of proof
 	Prf        proof.Proof                    // Merkle proof of value
