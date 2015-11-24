@@ -2,11 +2,11 @@ package conode
 
 import (
 	"bytes"
+	"encoding/json"
 	"github.com/dedis/cothority/lib/app"
 	dbg "github.com/dedis/cothority/lib/debug_lvl"
 	"github.com/dedis/cothority/lib/proof"
 	"github.com/dedis/cothority/proto/sign"
-	"encoding/json"
 )
 
 // Default port for the conode-setup - the stamping-request port
@@ -99,10 +99,10 @@ func (Sreq *StampReply) UnmarshalBinary(data []byte) error {
 
 type TimeStampMessage struct {
 	ReqNo SeqNo // Request sequence number
-				// ErrorReply *ErrorReply // Generic error reply to any request
-	Type  MessageType
-	Sreq  *StampRequest
-	Srep  *StampReply
+	// ErrorReply *ErrorReply // Generic error reply to any request
+	Type MessageType
+	Sreq *StampRequest
+	Srep *StampReply
 }
 
 func (tsm TimeStampMessage) MarshalBinary() ([]byte, error) {
