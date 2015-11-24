@@ -7,7 +7,6 @@ import (
 	"github.com/dedis/cothority/lib/dbg"
 	"sync"
 	"strconv"
-	"log"
 )
 
 const (
@@ -20,44 +19,67 @@ The counterpart to stamp.go - it listens for incoming requests
 and passes those to the roundstamper.
  */
 
-type StampListener struct {
-	// for aggregating messages from clients
-	Mux     sync.Mutex
-	Queue   [][]MustReplyMessage
-	// All clients connected to that listener
-	Clients map[string]coconet.Conn
-	// The name of the listener
-	NameP   string
+func init() {
+	SLList = make(map[string]*StampListener)
 }
 
-func NewStampListener(name string) *StampListener {
-	sl := &StampListener{}
-	sl.Queue = make([][]MustReplyMessage, 2)
-	sl.Queue[READING] = make([]MustReplyMessage, 0)
-	sl.Queue[PROCESSING] = make([]MustReplyMessage, 0)
-	sl.Clients = make(map[string]coconet.Conn)
+var SLList map[string]*StampListener
 
+type StampListener struct {
+	// for aggregating messages from clients
+	Mux       sync.Mutex
+	Queue     [][]MustReplyMessage
+	// All clients connected to that listener
+	Clients   map[string]coconet.Conn
+	// The name of the listener
+	NameL     string
+	// The channel for closing the connection
+	waitClose chan string
+	// The port we're listening on
+	Port      net.Listener
+}
+
+// Creates a new stamp listener one port above the
+// address given in nameP
+func NewStampListener(nameP string) *StampListener {
 	// listen for client requests at one port higher
 	// than the signing node
-	h, p, err := net.SplitHostPort(name)
+	var nameL string
+	h, p, err := net.SplitHostPort(nameP)
 	if err == nil {
 		i, err := strconv.Atoi(p)
 		if err != nil {
-			log.Fatal(err)
+			dbg.Fatal(err)
 		}
-		sl.NameP = net.JoinHostPort(h, strconv.Itoa(i+1))
+		nameL = net.JoinHostPort(h, strconv.Itoa(i + 1))
 	} else {
-		log.Fatal("Couldn't split host into name and port:", err)
+		dbg.Fatal("Couldn't split host into name and port:", err)
+	}
+	sl, ok := SLList[nameL]
+	if !ok {
+		sl = &StampListener{}
+		dbg.Lvl3("Creating new StampListener for", nameL)
+		sl.Queue = make([][]MustReplyMessage, 2)
+		sl.Queue[READING] = make([]MustReplyMessage, 0)
+		sl.Queue[PROCESSING] = make([]MustReplyMessage, 0)
+		sl.Clients = make(map[string]coconet.Conn)
+		sl.waitClose = make(chan string)
+		sl.NameL = nameL
+
+		SLList[sl.NameL] = sl
+		sl.ListenRequests()
+	} else {
+		dbg.Lvl3("Taking cached StampListener")
 	}
 	return sl
 }
 
 // listen for clients connections
 func (s *StampListener) ListenRequests() error {
-	dbg.Lvl3("Setup Peer")
-	global, _ := cliutils.GlobalBind(s.NameP)
-	dbg.LLvl3("Listening in server at", global)
-	ln, err := net.Listen("tcp4", global)
+	dbg.Lvl3("Setup StampListener on", s.NameL)
+	global, _ := cliutils.GlobalBind(s.NameL)
+	var err error
+	s.Port, err = net.Listen("tcp4", global)
 	if err != nil {
 		panic(err)
 	}
@@ -65,15 +87,21 @@ func (s *StampListener) ListenRequests() error {
 	go func() {
 		for {
 			dbg.Lvl2("Listening to sign-requests: %p", s)
-			conn, err := ln.Accept()
+			conn, err := s.Port.Accept()
 			if err != nil {
 				// handle error
 				dbg.Lvl3("failed to accept connection")
-				continue
+				select {
+				case w := <-s.waitClose:
+					dbg.Lvl3("Closing stamplistener:", w)
+					return
+				default:
+					continue
+				}
 			}
 
+			dbg.Lvl3("Waiting for connection")
 			c := coconet.NewTCPConnFromNet(conn)
-			dbg.Lvl2("Established connection with client:", c)
 
 			if _, ok := s.Clients[c.Name()]; !ok {
 				s.Clients[c.Name()] = c
@@ -82,9 +110,9 @@ func (s *StampListener) ListenRequests() error {
 					for {
 						tsm := TimeStampMessage{}
 						err := co.GetData(&tsm)
-						dbg.Lvl2("Got data to sign %+v - %+v", tsm, tsm.Sreq)
+						dbg.Lvlf2("Got data to sign %+v - %+v", tsm, tsm.Sreq)
 						if err != nil {
-							dbg.Lvlf1("%p Failed to get from child: %s", s.NameP, err)
+							dbg.Lvlf1("%p Failed to get from child: %s", s.NameL, err)
 							co.Close()
 							return
 						}
@@ -113,3 +141,10 @@ func (s *StampListener) ListenRequests() error {
 	return nil
 }
 
+// Close shuts down the connection
+func (s *StampListener) Close() {
+	close(s.waitClose)
+	s.Port.Close()
+	delete(SLList, s.NameL)
+	dbg.Lvl3(s.NameL, "Closing stamplistener done - SLList is", SLList)
+}

@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/dedis/cothority/lib/dbg"
 
 	"github.com/dedis/cothority/lib/sign"
@@ -27,6 +26,7 @@ type Peer struct {
 	RLock     sync.Mutex
 	MaxRounds int
 	CloseChan chan bool
+	Closed    bool
 
 	Logger    string
 	Hostname  string
@@ -73,7 +73,6 @@ func NewPeer(address string, conf *app.ConfigConode) *Peer {
 	peer.StampListener = NewStampListener(peer.Node.Name())
 	peer.Hostname = address
 	peer.App = "stamp"
-	peer.ListenRequests()
 
 	// Start the cothority-listener on port 2000
 	err = hc.Run(true, sign.MerkleTree, address)
@@ -81,16 +80,12 @@ func NewPeer(address string, conf *app.ConfigConode) *Peer {
 		dbg.Fatal(err)
 	}
 
-	peer.SetRootPeer()
-
-	closed := make(chan bool, 1)
-	go func() { err := peer.Node.Listen(); closed <- true; peer.Close(); log.Error(err) }()
+	go func() {
+		err := peer.Node.Listen()
+		dbg.Lvl2("Node.listen quits with status", err)
+		peer.CloseChan <- true
+	}()
 	return peer
-}
-
-func (peer *Peer) SetRootPeer(){
-	RegisterRoundCosiStamper(peer)
-	RegisterRoundStamper(peer)
 }
 
 func (peer *Peer) LoopRounds() {
@@ -126,8 +121,11 @@ func (peer *Peer) Run(role string) {
 		case "regular":
 			dbg.Lvl3(peer.Name(), "running as regular")
 			nextRole = peer.runAsRegular()
+		case "close":
+			dbg.Lvl3(peer.Name(), "closing")
+			return
 		default:
-			dbg.Fatal("Unable to run as anything")
+			dbg.Fatal(peer.Name(), "Unable to run as anything")
 			return
 		}
 
@@ -143,9 +141,16 @@ func (peer *Peer) Run(role string) {
 
 // Closes the channel
 func (peer *Peer) Close() {
-	dbg.Lvl4("closing stampserver: %p", peer.Node.Name())
+	if peer.Closed {
+		dbg.Lvl1("Peer", peer.Name(), "Already closed!")
+		return
+	} else {
+		peer.Closed = true
+	}
 	peer.CloseChan <- true
 	peer.Node.Close()
+	peer.StampListener.Close()
+	dbg.Lvlf3("Closing of peer: %s finished", peer.Name())
 }
 
 // This node is the root-node - still possible to change
@@ -162,22 +167,16 @@ func (peer *Peer) runAsRoot(nRounds int) string {
 	for {
 		select {
 		case nextRole := <-peer.ViewChangeCh():
-			dbg.Lvl4(peer.Name(), "assuming next role")
+			dbg.Lvl4(peer.Name(), "assuming next role is", nextRole)
 			return nextRole
 		// s.reRunWith(nextRole, nRounds, true)
 		case <-ticker:
 
 			dbg.Lvl4(peer.Name(), "Stamp server in round", peer.LastRound() + 1, "of", nRounds)
 
-			var err error
-			var round sign.Round
-			if false {
-				round = NewRoundCosiStamper(peer)
-			} else {
-				round, err = sign.NewRoundFromType("cosistamper", peer.Node)
-				if err != nil{
-					dbg.Fatal("Couldn't create cosistamp", err)
-				}
+			round, err := sign.NewRoundFromType("cosistamper", peer.Node)
+			if err != nil {
+				dbg.Fatal("Couldn't create cosistamp", err)
 			}
 			err = peer.StartAnnouncement(round)
 			if err != nil {
@@ -190,16 +189,21 @@ func (peer *Peer) runAsRoot(nRounds int) string {
 				dbg.Lvl2(peer.Name(), "reports exceeded the max round: terminating", peer.LastRound() + 1, ">=", nRounds)
 				return "close"
 			}
+		case <-peer.CloseChan:
+			dbg.Lvl3("Server-peer", peer.Name(), "has closed the connection")
+			return "close"
 		}
 	}
+	dbg.Lvl3("Finished runAsRoot")
+	return "close"
 }
 
 // This node is a child of the root-node
 func (peer *Peer) runAsRegular() string {
 	select {
 	case <-peer.CloseChan:
-		dbg.Lvl3("server", peer.Name(), "has closed the connection")
-		return ""
+		dbg.Lvl3("Regular-peer", peer.Name(), "has closed the connection")
+		return "close"
 
 	case nextRole := <-peer.ViewChangeCh():
 		return nextRole

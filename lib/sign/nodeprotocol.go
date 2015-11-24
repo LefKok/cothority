@@ -45,6 +45,7 @@ func (sn *Node) ProcessMessages() error {
 	for {
 		select {
 		case <-sn.closed:
+			dbg.Lvl3("Received closed-message through channel")
 			sn.StopHeartbeat()
 			return nil
 		default:
@@ -54,7 +55,7 @@ func (sn *Node) ProcessMessages() error {
 
 		// TODO: graceful shutdown voting
 			if !ok || err == coconet.ErrClosed || err == io.EOF {
-				dbg.Lvl3(sn.Name(), " getting from closed host")
+				dbg.Lvl3(sn.Name(), "getting from closed host")
 				sn.Close()
 				return coconet.ErrClosed
 			}
@@ -69,6 +70,7 @@ func (sn *Node) ProcessMessages() error {
 			sm := nm.Data.(*SigningMessage)
 			sm.From = nm.From
 			dbg.Lvl4(sn.Name(), "received message:", sm.Type)
+			dbg.Lvlf4("Message is %+v", sm)
 
 		// don't act on future view if not caught up, must be done after updating vote index
 		/*
@@ -161,7 +163,7 @@ func (sn *Node) ProcessMessages() error {
 				sn.ReceivedHeartbeat(sm.ViewNbr)
 				err = sn.SignatureBroadcast(sm)
 			case StatusReturn:
-				sn.StatusReturn(sm.ViewNbr, sm.SRm)
+				sn.StatusReturn(sm.ViewNbr, sm)
 			case CatchUpReq:
 				v := sn.VoteLog.Get(sm.Cureq.Index)
 				ctx := context.TODO()
@@ -254,7 +256,10 @@ func (sn *Node) Announce(sm *SigningMessage) error {
 			ViewNbr:         sn.ViewNo,
 			LastSeenVote: int(atomic.LoadInt64(&sn.LastSeenVote)),
 			RoundNbr:     RoundNbr,
-			Am: &AnnouncementMessage{},
+			Am: &AnnouncementMessage{
+				Message: make([]byte, 0),
+				RoundType: sm.Am.RoundType,
+			},
 		}
 	}
 	err := round.Announcement(view, RoundNbr, sm, out)
@@ -279,7 +284,7 @@ func (sn *Node) Announce(sm *SigningMessage) error {
 		}
 
 		// And sending to all our children-nodes
-		dbg.Lvl4(sn.Name(), "sending to all children")
+		dbg.Lvlf4("%s sending to all children %+v", sn.Name(), msgs_bm[0])
 		ctx := context.TODO()
 		if err := sn.PutDown(ctx, view, msgs_bm); err != nil {
 			return err
@@ -373,12 +378,15 @@ func (sn *Node) Challenge(sm *SigningMessage) error {
 		return fmt.Errorf("No Round Interface created for this round")
 	}
 	challs := make([]*SigningMessage, sn.NChildren(view))
-	for i := range challs {
+	i := 0
+	for child := range sn.Children(view) {
 		challs[i] = &SigningMessage{
 			ViewNbr: view,
 			RoundNbr: RoundNbr,
 			Type: Challenge,
+			To: child,
 			Chm: &ChallengeMessage{}}
+		i++
 	}
 
 	err := round.Challenge(sm, challs)
@@ -393,10 +401,8 @@ func (sn *Node) Challenge(sm *SigningMessage) error {
 			ViewNbr:     view,
 			RoundNbr: RoundNbr,
 		})
-	} else { // otherwise continue to pass down challenge
-		// TODO remove this hack of using the first one. Should be separate messages
-		// + SendChildrenChallengesProof should be put into roundstamper or
-		// round interface
+	} else {
+		// otherwise continue to pass down challenge
 		for _, out := range (challs) {
 			conn := sn.Children(view)[out.To]
 			conn.PutData(out)
@@ -558,17 +564,22 @@ func (sn *Node) SignatureBroadcast(sm *SigningMessage) error {
 		}
 	} else {
 		dbg.Lvl2(sn.Name(), "sending StatusReturn")
-		return sn.StatusReturn(view, &StatusReturnMessage{})
+		return sn.StatusReturn(view, &SigningMessage{
+			Type: StatusReturn,
+			ViewNbr: view,
+			RoundNbr: RoundNbr,
+			SRm: &StatusReturnMessage{},
+		})
 	}
 	return nil
 }
 
 // StatusReturn just adds up all children and sends the result to
 // the parent
-func (sn *Node) StatusReturn(view int, sr *StatusReturnMessage) error {
+func (sn *Node) StatusReturn(view int, sm *SigningMessage) error {
 	sn.PeerStatusRcvd += 1
-	sn.PeerStatus.Responders += sr.Responders
-	sn.PeerStatus.Peers += sr.Peers
+	sn.PeerStatus.Responders += sm.SRm.Responders
+	sn.PeerStatus.Peers += sm.SRm.Peers
 
 	// Wait for other children before propagating the message
 	if sn.PeerStatusRcvd < len(sn.Children(view)) {
@@ -584,11 +595,10 @@ func (sn *Node) StatusReturn(view int, sr *StatusReturnMessage) error {
 	} else {
 		dbg.Lvl4(sn.Name(), "puts up statusReturn for", sn.PeerStatus)
 		ctx := context.TODO()
-		err = sn.PutUp(ctx, view, &SigningMessage{
-			ViewNbr:         view,
-			Type:         StatusReturn,
-			LastSeenVote: int(atomic.LoadInt64(&sn.LastSeenVote)),
-			SRm:          &sn.PeerStatus})
+		sm.SRm = &sn.PeerStatus
+		err = sn.PutUp(ctx, view, sm)
 	}
+	dbg.Lvl3("Deleting round", sm.RoundNbr, sn.Rounds)
+	delete(sn.Rounds, sm.RoundNbr)
 	return err
 }

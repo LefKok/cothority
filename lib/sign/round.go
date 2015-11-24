@@ -42,6 +42,9 @@ type Round interface {
 	// Statistics: nodes -> root
 	// This is called at the end to collect eventual statistics
 	// about the round.
+
+	// Returns the string reflecting the type
+	GetType() string
 }
 
 // RoundFactory is a function that returns a Round given a SigningNode
@@ -65,11 +68,11 @@ func RegisterRoundFactory(roundType string, rf RoundFactory) {
 
 // Return the RoundFactory for this round type. Return an error if this round
 // has not been registered before.
-func NewRoundFromType(rtype string, sn *Node) (Round, error) {
-	dbg.LLvl3("Creating round-type:", rtype, "out of", RoundFactories)
+func NewRoundFromType(rtype string, node *Node) (Round, error) {
+	dbg.Lvl3("For", node.Name(), "creating round-type:", rtype, "out of", RoundFactories)
 	rf, ok := RoundFactories[rtype]
 	if !ok {
 		return nil, fmt.Errorf("RoundFactory not registered for the type %s", rtype)
 	}
-	return rf(sn), nil
+	return rf(node), nil
 }
