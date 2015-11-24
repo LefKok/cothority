@@ -80,6 +80,9 @@ type Server struct {
 	Logger   string
 	Hostname string
 	App      string
+	//if it is a key block round people are locked out
+	flag_mux sync.Mutex
+	flag_key bool
 }
 
 func NewServer(signer sign.Signer) *Server {
@@ -165,7 +168,7 @@ func (s *Server) Listen() error {
 					for {
 						tsm := BitCoSi.BitCoSiMessage{}
 						err := co.GetData(&tsm)
-						dbg.Lvl2("Got data to sign %+v - %+v", tsm, tsm.Treq)
+						//dbg.Lvl2("Got data to sign %+v - %+v", tsm, tsm.Treq)
 						if err != nil {
 							dbg.Lvlf1("%p Failed to get from child: %s", s, err)
 							co.Close()
@@ -280,12 +283,10 @@ func GetKeyBlock(s *Server, n int) (t BitCoSi.KeyBlock, _ error) {
 
 }
 
-var flag_key bool
-
 func (s *Server) runAsRoot(nRounds int) string {
 	// every 5 seconds start a new round
 	ticker := time.Tick(2 * ROUND_TIME)
-	tacker := time.Tick(5 * ROUND_TIME)
+	tacker := time.Tick(11 * ROUND_TIME)
 
 	if s.LastRound()+1 > nRounds && nRounds >= 0 {
 		dbg.Lvl1(s.Name(), "runAsRoot called with too large round number")
@@ -301,8 +302,9 @@ func (s *Server) runAsRoot(nRounds int) string {
 		// s.reRunWith(nextRole, nRounds, true)
 
 		case <-tacker:
-			flag_key = true
-
+			s.flag_mux.Lock()
+			s.flag_key = true
+			dbg.Lvl1("flag is %v", s.flag_key)
 			dbg.Lvl4(s.Name(), "Keyblock time server in round", s.LastRound()+1, "of", nRounds)
 
 			var err error
@@ -325,6 +327,8 @@ func (s *Server) runAsRoot(nRounds int) string {
 				if err != nil {
 					//dbg.Lvl3(err)
 					time.Sleep(1 * time.Second)
+					s.flag_mux.Unlock()
+
 					break
 				}
 
@@ -332,6 +336,8 @@ func (s *Server) runAsRoot(nRounds int) string {
 				//s.trblocks[0].Print()
 
 				err = s.StartSigningRound()
+				s.flag_mux.Unlock()
+
 			}
 			if err == sign.ChangingViewError {
 				// report change in view, and continue with the select
@@ -354,7 +360,9 @@ func (s *Server) runAsRoot(nRounds int) string {
 			}
 
 		case <-ticker:
-			flag_key = false
+			s.flag_mux.Lock()
+			s.flag_mux.Unlock()
+			s.flag_key = false
 
 			dbg.Lvl4(s.Name(), "Stamp server in round", s.LastRound()+1, "of", nRounds)
 
@@ -499,7 +507,7 @@ func (s *Server) CommitFunc() sign.CommitFunc {
 
 func (s *Server) OnDone() sign.DoneFunc {
 
-	if flag_key == false {
+	if s.flag_key == false {
 		return func(view int, SNRoot hashid.HashId, LogHash hashid.HashId, p proof.Proof,
 			sb *sign.SignatureBroadcastMessage, suite abstract.Suite) {
 			s.mux.Lock()
@@ -541,6 +549,8 @@ func (s *Server) OnDone() sign.DoneFunc {
 			s.Timestamp = 0
 		}
 	} else {
+		dbg.LLvlf1("%v", s.flag_key)
+
 		return func(view int, SNRoot hashid.HashId, LogHash hashid.HashId, p proof.Proof,
 			sb *sign.SignatureBroadcastMessage, suite abstract.Suite) {
 			s.Kmux.Lock()
@@ -581,8 +591,7 @@ func (s *Server) OnDone() sign.DoneFunc {
 }
 
 func (s *Server) AggregateCommits(view int) []byte {
-	dbg.Lvl4(s.Name(), "calling AggregateCommits")
-	if flag_key == false {
+	if s.flag_key == false {
 
 		s.mux.Lock()
 		// get data from s once to avoid refetching from structure
@@ -636,6 +645,7 @@ func (s *Server) AggregateCommits(view int) []byte {
 
 		return s.Root
 	} else {
+		dbg.Lvl1(s.Name(), "calling AggregateCommits")
 
 		s.mux.Lock()
 		// get data from s once to avoid refetching from structure

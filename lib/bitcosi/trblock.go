@@ -11,14 +11,7 @@ import (
 	"net"
 )
 
-type Block interface {
-	calculate_root()
-	hash()
-	NewBlock()
-	NewHeader()
-}
-
-type TrBlock struct {
+type Block struct {
 	Magic      [4]byte
 	BlockSize  uint32
 	HeaderHash string
@@ -32,6 +25,11 @@ type Header struct {
 	MerkleRoot string
 	ParentKey  string
 	ParentTr   string
+	nonce      uint32
+}
+
+type TrBlock struct {
+	Block
 }
 
 func (*TrBlock) NewBlock(transactions []blkparser.Tx, n int, parent_tr string, parent_key string, IP net.IP, key string) (tr TrBlock) {
@@ -39,7 +37,7 @@ func (*TrBlock) NewBlock(transactions []blkparser.Tx, n int, parent_tr string, p
 	trb.Magic = [4]byte{0xF9, 0xBE, 0xB4, 0xD9}
 	trb.TransactionList = NewTransactionList(transactions, n)
 	trb.Header = trb.NewHeader(trb.TransactionList, parent_tr, parent_key, IP, key)
-	trb.HeaderHash = trb.hash(trb.Header)
+	trb.HeaderHash = trb.hash(fmt.Sprintf("%v", trb.Header))
 	trb.BlockSize = 0
 	return *trb
 }
@@ -54,7 +52,7 @@ func (t *TrBlock) NewHeader(transactions TransactionList, parent_tr string, pare
 	return *hdr
 }
 
-func (t *TrBlock) calculate_root(transactions TransactionList) (res string) {
+func (t *Block) calculate_root(transactions TransactionList) (res string) {
 	var hashes []hashid.HashId
 
 	for _, t := range transactions.Txs {
@@ -66,9 +64,9 @@ func (t *TrBlock) calculate_root(transactions TransactionList) (res string) {
 	return
 }
 
-func (t *TrBlock) hash(h Header) (res string) {
+func (t *Block) hash(data string) (res string) {
 	//change it to be more portable
-	data := fmt.Sprintf("%v", h)
+	//data := fmt.Sprintf("%v", h)
 	sha := sha256.New()
 	sha.Write([]byte(data))
 	hash := sha.Sum(nil)
