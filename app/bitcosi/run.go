@@ -60,19 +60,12 @@ func Run(configFile, key string) {
 		address = addr
 	}
 	peer = conode.NewPeer(address, conf)
-	RegisterRoundMicro(peer)
-	RegisterRoundKey(peer)
 	if peer.IsRoot(0) {
 		ticker := time.Tick(time.Second)
-		tacker := time.Tick(2 * time.Second)
 		for {
 			select {
 			case <-ticker:
-				peer.StartAnnouncement(NewRoundMicro(peer))
-
-			case <-tacker:
-				peer.StartAnnouncement(NewRoundKey(peer))
-
+				peer.StartAnnouncement(NewRoundPrepare(peer.Node))
 			}
 
 		}

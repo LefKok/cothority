@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"github.com/dedis/cothority/lib/app"
 	"github.com/dedis/cothority/lib/bitcosi/blkparser"
-	dbg "github.com/dedis/cothority/lib/debug_lvl"
+	"github.com/dedis/cothority/lib/dbg"
 	"github.com/dedis/cothority/lib/proof"
-	"github.com/dedis/cothority/proto/sign"
+	"github.com/dedis/cothority/lib/sign"
 )
 
 // Default port for the conode-setup - the stamping-request port
@@ -22,8 +22,7 @@ const (
 	Error MessageType = iota
 	TransactionAnnouncmentType
 	BlockReplyType
-	KeyBlockRequestType
-	TrBlockRequestType
+	BlockRequestType
 	BitCoSiClose
 	BitCoSiExit
 )
@@ -39,8 +38,7 @@ type BlockReply struct {
 	SuiteStr   string
 	Timestamp  int64                          // The timestamp requested for the block to prove its ordering
 	BlockLen   int                            // Length of Block
-	TrBlock    TrBlock                        // The Block including a number of transactions
-	KeyBlock   KeyBlock                       // The Block including a number of transactions
+	Block      TrBlock                        // The Block including a number of transactions
 	MerkleRoot []byte                         // root of the merkle tree
 	PrfLen     int                            // Length of proof
 	Prf        proof.Proof                    // Merkle proof of value
