@@ -82,7 +82,7 @@ func NewStampListener(nameP string) *StampListener {
 	sl, ok := SLList[nameL]
 	if !ok {
 		sl = &StampListener{}
-		dbg.Lvl3("Creating new StampListener for", nameL)
+		dbg.Lvl3("Creating new bitcosi-StampListener for", nameL)
 		sl.Queue = make([][]MustReplyMessage, 2)
 		sl.Queue[READING] = make([]MustReplyMessage, 0)
 		sl.Queue[PROCESSING] = make([]MustReplyMessage, 0)
