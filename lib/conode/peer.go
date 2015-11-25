@@ -21,7 +21,6 @@ incoming requests through StampListener.
 
 type Peer struct {
 	*sign.Node
-	*StampListener
 
 	RLock     sync.Mutex
 	MaxRounds int
@@ -70,7 +69,6 @@ func NewPeer(address string, conf *app.ConfigConode) *Peer {
 	peer.RLock = sync.Mutex{}
 
 	peer.CloseChan = make(chan bool, 5)
-	peer.StampListener = NewStampListener(peer.Node.Name())
 	peer.Hostname = address
 	peer.App = "stamp"
 
@@ -149,7 +147,7 @@ func (peer *Peer) Close() {
 	}
 	peer.CloseChan <- true
 	peer.Node.Close()
-	peer.StampListener.Close()
+	StampListenersClose()
 	dbg.Lvlf3("Closing of peer: %s finished", peer.Name())
 }
 
