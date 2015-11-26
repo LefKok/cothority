@@ -12,8 +12,8 @@ import (
 func TestStamp(t *testing.T) {
 	dbg.TestOutput(testing.Verbose(), 4)
 	peer1, peer2 := createPeers()
-	go peer1.LoopRounds()
-	go peer2.LoopRounds()
+	go peer1.LoopRounds("cosistamper", 2)
+	go peer2.LoopRounds("cosistamper", 2)
 	time.Sleep(time.Second)
 
 	s, err := conode.NewStamp("testdata/config.toml")
@@ -21,7 +21,7 @@ func TestStamp(t *testing.T) {
 		t.Fatal("Couldn't open config-file:", err)
 	}
 
-	for _, port := range ([]int{2000, 2010}) {
+	for _, port := range ([]int{7000, 7010}) {
 		stamper := "localhost:" + strconv.Itoa(port)
 		dbg.Lvl2("Contacting stamper", stamper)
 		tsm, err := s.GetStamp([]byte("test"), stamper)

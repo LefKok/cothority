@@ -10,6 +10,9 @@ import (
 	"github.com/dedis/cothority/lib/coconet"
 	"github.com/dedis/cothority/lib/dbg"
 	"golang.org/x/net/context"
+	"syscall"
+	"time"
+	"strings"
 )
 
 /*
@@ -41,7 +44,7 @@ func (sn *Node) ProcessMessages() error {
 
 	// gossip to make sure we are up to date
 	sn.StartGossip()
-
+	errReset := syscall.ECONNRESET.Error()
 	for {
 		select {
 		case <-sn.closed:
@@ -52,9 +55,21 @@ func (sn *Node) ProcessMessages() error {
 			dbg.Lvl4(sn.Name(), "waiting for message")
 			nm, ok := <-msgchan
 			err := nm.Err
+			errStr := ""
+			if err != nil{
+				errStr = err.Error()
+			}
 
-		// TODO: graceful shutdown voting
-			if !ok || err == coconet.ErrClosed || err == io.EOF {
+		// One of the errors doesn't have an error-number applied, so we need
+		// to check for the string - will probably be fixed in go 1.6
+			if !ok || err == coconet.ErrClosed || err == io.EOF ||
+			err == io.ErrClosedPipe ||
+			strings.Contains(errStr, errReset) {
+				if strings.Contains(errStr, errReset) {
+					dbg.Lvl1(sn.Name(), "connection reset error")
+					dbg.Print(errStr, errReset)
+					time.Sleep(time.Minute)
+				}
 				dbg.Lvl3(sn.Name(), "getting from closed host")
 				sn.Close()
 				return coconet.ErrClosed
@@ -62,28 +77,18 @@ func (sn *Node) ProcessMessages() error {
 
 		// if it is a non-fatal error try again
 			if err != nil {
-				log.Errorln(sn.Name(), " error getting message (still continuing) ", err)
+				dbg.Lvl1(sn.Name(), "error getting message (still continuing)", err)
+				if strings.Contains(errStr, errReset) {
+					dbg.Lvl1(sn.Name(), "connection reset error")
+				}
+				dbg.Print(errStr, errReset)
+				time.Sleep(time.Minute)
 				continue
 			}
 		// interpret network message as Signing Message
-		//log.Printf("got message: %#v with error %v\n", sm, err)
 			sm := nm.Data.(*SigningMessage)
 			sm.From = nm.From
-			dbg.Lvl4(sn.Name(), "received message:", sm.Type)
-			dbg.Lvlf4("Message is %+v", sm)
-
-		// don't act on future view if not caught up, must be done after updating vote index
-		/*
-			sn.viewmu.Lock()
-			if sm.ViewNbr > sn.ViewNo {
-				if atomic.LoadInt64(&sn.LastSeenVote) != atomic.LoadInt64(&sn.LastAppliedVote) {
-					log.Warnln(sn.Name(), "not caught up for view change", sn.LastSeenVote, sn.LastAppliedVote)
-					return errors.New("not caught up for view change")
-				}
-			}
-			sn.viewmu.Unlock()
-			sn.updateLastSeenVote(sm.LastSeenVote, sm.From)
-			*/
+			dbg.Lvlf4("Message on %s is type %s and %+v", sn.Name(), sm.Type, sm)
 
 			switch sm.Type {
 			// if it is a bad message just ignore it
@@ -221,7 +226,6 @@ func (sn *Node) ProcessMessages() error {
 			}
 		}
 	}
-
 }
 
 func (sn *Node) Announce(sm *SigningMessage) error {
@@ -569,7 +573,7 @@ func (sn *Node) SignatureBroadcast(sm *SigningMessage) error {
 			return err
 		}
 	} else {
-		dbg.Lvl2(sn.Name(), "sending StatusReturn")
+		dbg.Lvl3(sn.Name(), "sending StatusReturn")
 		return sn.StatusReturn(view, &SigningMessage{
 			Type: StatusReturn,
 			ViewNbr: view,
@@ -597,7 +601,7 @@ func (sn *Node) StatusReturn(view int, sm *SigningMessage) error {
 	if sn.IsRoot(view) {
 		// Add the root-node
 		sn.PeerStatus.Peers += 1
-		dbg.Lvl2("We got", sn.PeerStatus.Responders, "responses from", sn.PeerStatus.Peers, "peers.")
+		dbg.Lvl3("We got", sn.PeerStatus.Responders, "responses from", sn.PeerStatus.Peers, "peers.")
 	} else {
 		dbg.Lvl4(sn.Name(), "puts up statusReturn for", sn.PeerStatus)
 		ctx := context.TODO()

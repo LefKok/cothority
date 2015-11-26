@@ -8,25 +8,11 @@ import (
 	"strconv"
 	"testing"
 	"github.com/dedis/cothority/lib/sign"
+	"github.com/dedis/cothority/lib/graphs"
 	"time"
 )
 
-// Runs two conodes and tests if the value returned is OK
-func TestPeer(t *testing.T) {
-	dbg.TestOutput(testing.Verbose(), 4)
-	peer1, peer2 := createPeers()
-
-	round, err := sign.NewRoundFromType("cosistamper", peer1.Node)
-	if err != nil {
-		dbg.Fatal("Couldn't create cosistamp", err)
-	}
-	peer1.StartAnnouncement(round)
-	time.Sleep(time.Second)
-	peer1.Close()
-	peer2.Close()
-}
-
-func TestRoundCosiStamper(t *testing.T) {
+func TestStampListener(t *testing.T) {
 	dbg.TestOutput(testing.Verbose(), 4)
 	peer1, peer2 := createPeers()
 
@@ -45,6 +31,87 @@ func TestRoundCosiStamper(t *testing.T) {
 	}
 	peer1.Close()
 	peer2.Close()
+}
+
+// Can we build the Peer without a valid key?
+func TestEmptyKeys(t *testing.T) {
+	dbg.TestOutput(testing.Verbose(), 4)
+	conf1 := readConfig()
+	emptyKeys(conf1.Tree)
+	peer1 := createPeer(conf1, 1)
+	dbg.Lvlf3("Peer 1 is %+v", peer1)
+
+	conf2 := readConfig()
+	emptyKeys(conf2.Tree)
+	peer2 := createPeer(conf2, 1)
+	dbg.Lvlf3("Peer 1 is %+v", peer2)
+
+	go peer1.LoopRounds("cosi", 2)
+	go peer2.LoopRounds("cosi", 2)
+
+	time.Sleep(time.Second * 2)
+
+	peer1.Close()
+	peer2.Close()
+}
+
+// Make sure closeall sends messages to everybody
+func TestCloseAll(t *testing.T) {
+	dbg.TestOutput(testing.Verbose(), 4)
+	peer1, peer2 := createPeers()
+
+	// Launch peers in endless loop
+	go peer1.LoopRounds("cosi", -1)
+	go peer2.LoopRounds("cosi", -1)
+
+	// Send CloseAll manually
+	peer1.SendCloseAll()
+	time.Sleep(time.Second)
+	if !peer1.Closed{
+		t.Fatal("Peer 1 should be closed now.")
+	}
+	if !peer2.Closed{
+		t.Fatal("Peer 2 should be closed now.")
+	}
+
+	// Now let's just wait for two rounds
+	peer1, peer2 = createPeers()
+	go peer1.LoopRounds("cosi", 2)
+	go peer2.LoopRounds("cosi", 2)
+	time.Sleep(time.Second * 4)
+	if !peer1.Closed{
+		t.Fatal("Peer 1 should be closed now.")
+	}
+	if !peer2.Closed{
+		t.Fatal("Peer 2 should be closed now.")
+	}
+}
+
+// What happens if client closes before server does?
+func TestClientBeforeServer(t *testing.T) {
+	dbg.TestOutput(testing.Verbose(), 4)
+	peer1, peer2 := createPeers()
+
+	peer2.Close()
+	time.Sleep(time.Second)
+
+	round, err := sign.NewRoundFromType("cosi", peer1.Node)
+	if err != nil{
+		t.Fatal("Error while creating round:", err)
+	}
+
+	peer1.StartAnnouncement(round)
+	time.Sleep(time.Second)
+
+	peer1.Close()
+}
+
+func emptyKeys(t *graphs.Tree) {
+	t.PriKey = ""
+	t.PubKey = ""
+	for _, c := range t.Children {
+		emptyKeys(c)
+	}
 }
 
 func createPeers() (p1, p2 *conode.Peer) {
