@@ -7,7 +7,7 @@ import (
 	"github.com/dedis/cothority/lib/bitcosi/blkparser"
 	"github.com/dedis/cothority/lib/dbg"
 	"github.com/dedis/cothority/lib/proof"
-	"github.com/dedis/cothority/lib/sign"
+	"github.com/dedis/crypto/abstract"
 )
 
 // Default port for the conode-setup - the stamping-request port
@@ -35,14 +35,18 @@ type TransactionAnnouncment struct {
 // somehow. We could just simply add it as a field and not (un)marhsal it
 // We'd just make sure that the suite is setup before unmarshaling.
 type BlockReply struct {
-	SuiteStr   string
-	Timestamp  int64                          // The timestamp requested for the block to prove its ordering
-	BlockLen   int                            // Length of Block
-	Block      TrBlock                        // The Block including a number of transactions
-	MerkleRoot []byte                         // root of the merkle tree
-	PrfLen     int                            // Length of proof
-	Prf        proof.Proof                    // Merkle proof of value
-	SigBroad   sign.SignatureBroadcastMessage // All other elements necessary
+	SuiteStr      string
+	Timestamp     int64           // The timestamp requested for the block to prove its ordering
+	BlockLen      int             // Length of Block
+	Block         TrBlock         // The Block including a number of transactions
+	MerkleRoot    []byte          // root of the merkle tree
+	PrfLen        int             // Length of proof
+	Prf           proof.Proof     // Merkle proof of value
+	Response      abstract.Secret // Aggregate response
+	Challenge     abstract.Secret // Aggregate challenge
+	AggCommit     abstract.Point  // Aggregate commitment key
+	AggPublic     abstract.Point  // Aggregate public key (use for easy troubleshooting)
+	SignatureInfo []byte          // All other elements necessary
 }
 
 type BitCoSiMessage struct {
@@ -56,38 +60,54 @@ type BitCoSiMessage struct {
 func (sr *BlockReply) MarshalJSON() ([]byte, error) {
 	type Alias BlockReply
 	var b bytes.Buffer
+	dbg.Print("Starting marshalling")
 	suite := app.GetSuite(sr.SuiteStr)
-	if err := suite.Write(&b, sr.SigBroad); err != nil {
-		dbg.Lvl1("encoding stampreply signature broadcast :", err)
+	dbg.Print("Preparing abstracts")
+	if err := suite.Write(&b, sr.Response, sr.Challenge, sr.AggCommit, sr.AggPublic); err != nil {
+		dbg.Lvl1("encoding stampreply response/challenge/AggCommit:", err)
 		return nil, err
 	}
 
+	dbg.Print("Returning helper-struct")
 	return json.Marshal(&struct {
-		SigBroad []byte
+		SignatureInfo []byte
 		*Alias
 	}{
-		SigBroad: b.Bytes(),
-		Alias:    (*Alias)(sr),
+		SignatureInfo: b.Bytes(),
+		Alias:         (*Alias)(sr),
 	})
 }
 
 func (sr *BlockReply) UnmarshalJSON(dataJSON []byte) error {
 	type Alias BlockReply
+	dbg.Print("Starting unmarshal")
+	suite := app.GetSuite(sr.SuiteStr)
 	aux := &struct {
-		SigBroad []byte
+		SignatureInfo []byte
+		Response      abstract.Secret
+		Challenge     abstract.Secret
+		AggCommit     abstract.Point
+		AggPublic     abstract.Point
 		*Alias
 	}{
-		Alias: (*Alias)(sr),
+		Response:  suite.Secret(),
+		Challenge: suite.Secret(),
+		AggCommit: suite.Point(),
+		AggPublic: suite.Point(),
+		Alias:     (*Alias)(sr),
 	}
+	dbg.Print("Doing JSON unmarshal")
 	if err := json.Unmarshal(dataJSON, &aux); err != nil {
+		dbg.Print("Error in unmarshal:", err)
 		return err
 	}
-	suite := app.GetSuite(sr.SuiteStr)
-	sr.SigBroad = sign.SignatureBroadcastMessage{}
-	if err := suite.Read(bytes.NewReader(aux.SigBroad), &sr.SigBroad); err != nil {
-		dbg.Fatal("decoding signature broadcast : ", err)
+	dbg.Print("Preparing suites")
+	dbg.Print("suite.Read")
+	if err := suite.Read(bytes.NewReader(aux.SignatureInfo), &sr.Response, &sr.Challenge, &sr.AggCommit, &sr.AggPublic); err != nil {
+		dbg.Fatal("decoding signature Response / Challenge / AggCommit: ", err)
 		return err
 	}
+	dbg.Print("Finished")
 	return nil
 }
 

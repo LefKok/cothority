@@ -1,32 +1,34 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/dedis/cothority/lib/bitcosi"
 	"github.com/dedis/cothority/lib/coconet"
-	"github.com/dedis/cothority/lib/conode"
 	"github.com/dedis/cothority/lib/dbg"
+	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/cothority/lib/sign"
 )
 
 /*
-Implements a Stamper and a Cosi-round
+Implements a BitCoSI Prepare and a Cosi-round
 */
 
 const RoundPrepareType = "prepare"
 
 type RoundPrepare struct {
 	*StampListener
-	*conode.RoundStamper
-	ClientQueue []ReplyMessage
+	*sign.RoundCosi
+	ClientQueue   []MustReplyMessage
+	TempBlock     BitCoSi.TrBlock
+	LastBlockHash string
 }
 
-func getblock(round *RoundPrepare, n int) (_ BitCoSi.TrBlock, _ error) {
+func (round *RoundPrepare) getblock(n int) (trb BitCoSi.TrBlock, _ error) {
 	if len(round.transaction_pool) > 0 {
-
 		trlist := BitCoSi.NewTransactionList(round.transaction_pool, n)
-		header := BitCoSi.NewHeader(trlist, round.Last_Block, round.IP, round.PublicKey)
-		trblock := BitCoSi.NewTrBlock(trlist, header)
+		header := trb.NewHeader(trlist, round.Last_Block, round.IP, round.PublicKey)
+		trblock := trb.NewTrBlock(trlist, header)
 		round.transaction_pool = round.transaction_pool[trblock.TransactionList.TxCnt:]
 		round.Last_Block = trblock.HeaderHash
 		return trblock, nil
@@ -47,65 +49,129 @@ func NewRoundPrepare(node *sign.Node) *RoundPrepare {
 	dbg.Lvlf3("Making new roundcosistamper %+v", node)
 	round := &RoundPrepare{}
 	round.StampListener = NewStampListener(node.Name())
-	round.RoundStamper = conode.NewRoundStamper(node)
+	round.RoundCosi = sign.NewRoundCosi(node)
 	round.Type = RoundPrepareType
+	round.TempBlock = BitCoSi.TrBlock{}
+	round.Last_Block = "0"
 	return round
 }
 
-// Announcement is already defined in RoundStamper
+// Announcement is already defined in RoundCoSi
 
 func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.SigningMessage) error {
 	if round.IsRoot {
 
+		round.Mux.Lock()
+		// messages read will now be processed
+		round.Queue[READING], round.Queue[PROCESSING] = round.Queue[PROCESSING], round.Queue[READING]
+		round.Queue[READING] = round.Queue[READING][:0]
+		round.ClientQueue = make([]MustReplyMessage, len(round.Queue[PROCESSING]))
+
+		// get data from s once to avoid refetching from structure
+		round.Mux.Unlock()
+
 		round.trmux.Lock()
-		trblock, err := getblock(round, 10)
+		dbg.LLvl1("commit?")
+
+		trblock, err := round.getblock(10)
 		round.trmux.Unlock()
 		if err != nil {
+			dbg.LLvl1(err)
 			return nil
 		}
+
+		trblock.Print()
+
+		for i, q := range round.Queue[PROCESSING] {
+			//queue[i] = q.Tsm.Treq.Val
+			round.ClientQueue[i] = q
+			round.ClientQueue[i].Block = trblock
+		}
+
 		round.bmux.Lock()
 		round.blocks = append(round.blocks, trblock)
 		round.bmux.Unlock()
-		// get data from s once to avoid refetching from structure
-		var q [][]byte = make([][]byte, 1)
-		q[0] = []byte(trblock.HeaderHash)
-		round.RoundStamper.QueueSet(q)
-		round.Mux.Unlock()
+
+		out.Com.MTRoot = hashid.HashId([]byte(trblock.HeaderHash))
+		//trblock.Print()
 
 	}
-	round.RoundStamper.Commitment(in, out)
+
+	round.RoundCosi.Commitment(in, out)
 	return nil
 }
 
 func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.SigningMessage) error {
+	if round.IsRoot {
+		round.bmux.Lock()
+		if len(round.blocks) > 0 {
+			for _, o := range out {
+				var err error
+				o.Chm.Message, err = json.Marshal(round.blocks[len(round.blocks)-1])
+				if err != nil {
 
-	round.RoundStamper.Challenge(in, out)
+					dbg.Fatal("Problem sending TrBlock")
+				}
+			}
+		}
+		round.bmux.Unlock()
+
+	} else {
+		if len(in.Chm.Message) > 0 {
+			if err := json.Unmarshal(in.Chm.Message, &round.TempBlock); err != nil {
+
+				dbg.Fatal("Problem parsing TrBlock")
+			}
+			dbg.Lvl1("peer got the block")
+			//block.Print()
+		}
+	}
+
+	round.RoundCosi.Challenge(in, out)
 	return nil
 }
 
 func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.SigningMessage) error {
-	round.RoundStamper.Response(in, out)
+	dbg.LLvl1("response?")
+	//fix so that it does note enter when there is no new block
+
+	if !round.IsRoot {
+		if round.verify_and_store(round.TempBlock) {
+			round.Last_Block = round.TempBlock.HeaderHash
+			dbg.LLvl3("Block Accepted %v", round.TempBlock.HeaderHash)
+		} else {
+			dbg.LLvl3("Block Rejected %v", round.TempBlock.HeaderHash)
+
+		}
+
+	}
+
+	round.RoundCosi.Response(in, out)
 	return nil
 }
 
 func (round *RoundPrepare) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
-	round.RoundStamper.SignatureBroadcast(in, out)
-	for i, msg := range round.ClientQueue {
-		respMessg := &conode.TimeStampMessage{
-			Type:  conode.StampSignatureType,
-			ReqNo: conode.SeqNo(msg.ReqNo),
-			Srep: &conode.StampSignature{
-				SuiteStr:   round.Suite.String(),
-				Timestamp:  round.Timestamp,
-				MerkleRoot: round.MTRoot,
-				Prf:        round.RoundStamper.CombProofs[i],
+	round.RoundCosi.SignatureBroadcast(in, out)
+
+	for _, msg := range round.ClientQueue {
+		round.bmux.Lock()
+		msg.Block.Print()
+
+		respMessg := &BitCoSi.BitCoSiMessage{
+			Type:  BitCoSi.BlockReplyType,
+			ReqNo: msg.Tsm.ReqNo,
+			Brep: &BitCoSi.BlockReply{
+				SuiteStr:   suite.String(),
+				Block:      msg.Block,
+				MerkleRoot: round.RoundCosi.Cosi.MTRoot,
+				Prf:        round.RoundCosi.Cosi.Proof,
 				Response:   in.SBm.R0_hat,
 				Challenge:  in.SBm.C,
 				AggCommit:  in.SBm.V0_hat,
-				AggPublic:  in.SBm.X0_hat,
-			}}
+				AggPublic:  in.SBm.X0_hat}}
 		round.PutToClient(msg.To, respMessg)
-		dbg.Lvl2("Sent signature response back to client", msg.To)
+		dbg.Lvlf1("Sent signature response back to %+v", respMessg.Brep)
+		round.bmux.Unlock()
 	}
 	return nil
 }
@@ -120,4 +186,10 @@ func (round *RoundPrepare) PutToClient(name string, data coconet.BinaryMarshaler
 	if err != nil && err != coconet.ErrNotEstablished {
 		dbg.Lvl1("%p error putting to client: %v", round, err)
 	}
+}
+
+func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock) bool {
+
+	return block.Header.Parent == round.Last_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.Hash(block.Header)
+
 }

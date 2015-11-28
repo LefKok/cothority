@@ -140,7 +140,7 @@ func (s *StampListener) ListenRequests() error {
 					for {
 						tsm := BitCoSi.BitCoSiMessage{}
 						err := co.GetData(&tsm)
-						dbg.Lvl2("Got data to sign %+v - %+v", tsm, tsm.Treq)
+						//dbg.Lvl2("Got data to sign %+v - %+v", tsm, tsm.Treq)
 						if err != nil {
 							dbg.Lvlf1("%p Failed to get from child: %s", s, err)
 							co.Close()
@@ -159,6 +159,8 @@ func (s *StampListener) ListenRequests() error {
 
 						case BitCoSi.TransactionAnnouncmentType:
 							s.trmux.Lock()
+							dbg.Lvl2("Got a transaction to sign %+v ", tsm.Treq.Val)
+
 							s.transaction_pool = append(s.transaction_pool, tsm.Treq.Val)
 							s.trmux.Unlock()
 
@@ -185,4 +187,11 @@ func (s *StampListener) Close() {
 	s.Port.Close()
 	delete(SLList, s.NameL)
 	dbg.Lvl3(s.NameL, "Closing stamplistener done - SLList is", SLList)
+}
+
+// StampListenersClose closes all open stamplisteners
+func StampListenersClose() {
+	for _, s := range SLList {
+		s.Close()
+	}
 }

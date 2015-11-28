@@ -4,13 +4,12 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/dedis/cothority/lib/app"
 	"github.com/dedis/cothority/lib/cliutils"
-	"github.com/dedis/cothority/lib/conode"
 	"github.com/dedis/cothority/lib/dbg"
 
 	"time"
 )
 
-var peer *conode.Peer
+var peer *Peer
 
 func init() {
 	command := cli.Command{
@@ -59,19 +58,20 @@ func Run(configFile, key string) {
 		conf.Public = pub
 		address = addr
 	}
-	peer = conode.NewPeer(address, conf)
+	peer = NewPeer(address, conf)
 	if peer.IsRoot(0) {
-		ticker := time.Tick(time.Second)
+		ticker := time.Tick(1 * time.Second)
 		for {
 			select {
 			case <-ticker:
 				peer.StartAnnouncement(NewRoundPrepare(peer.Node))
+
 			}
 
 		}
 	} else {
 		for {
-			peer.LoopRounds()
+			peer.LoopRounds(RoundPrepareType, -1)
 		}
 	}
 }

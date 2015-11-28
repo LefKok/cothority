@@ -25,26 +25,26 @@ type Header struct {
 	Parent     string
 }
 
-func NewTrBlock(transactions TransactionList, header Header) (tr TrBlock) {
+func (*TrBlock) NewTrBlock(transactions TransactionList, header Header) (tr TrBlock) {
 	trb := new(TrBlock)
 	trb.Magic = [4]byte{0xF9, 0xBE, 0xB4, 0xD9}
-	trb.HeaderHash = hash(header)
+	trb.HeaderHash = trb.Hash(header)
 	trb.TransactionList = transactions
 	trb.BlockSize = 0
 	trb.Header = header
 	return *trb
 }
 
-func NewHeader(transactions TransactionList, parent string, IP net.IP, key string) (hd Header) {
+func (t *TrBlock) NewHeader(transactions TransactionList, parent string, IP net.IP, key string) (hd Header) {
 	hdr := new(Header)
 	hdr.LeaderId = IP
 	hdr.PublicKey = key
 	hdr.Parent = parent
-	hdr.MerkleRoot = calculate_root(transactions)
+	hdr.MerkleRoot = t.Calculate_root(transactions)
 	return *hdr
 }
 
-func calculate_root(transactions TransactionList) (res string) {
+func (trb *TrBlock) Calculate_root(transactions TransactionList) (res string) {
 	var hashes []hashid.HashId
 
 	for _, t := range transactions.Txs {
@@ -56,7 +56,7 @@ func calculate_root(transactions TransactionList) (res string) {
 	return
 }
 
-func hash(h Header) (res string) {
+func (trb *TrBlock) Hash(h Header) (res string) {
 	//change it to be more portable
 	data := fmt.Sprintf("%v", h)
 	sha := sha256.New()

@@ -22,4 +22,4 @@ cat $KEYS*.pub >> $HOSTLIST
 for a in $( seq 2 $NUMBER ); do
   ./$COMMAND -debug $DBG run -key $KEYS$a &
 done
-./$COMMAND -debug $DBG run -key ${KEYS}1
+./$COMMAND -debug 5 run -key ${KEYS}1
