@@ -4,10 +4,10 @@ import (
 	"github.com/dedis/cothority/lib/dbg"
 
 	"errors"
+	"fmt"
 	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/cothority/lib/proof"
 	"github.com/dedis/crypto/abstract"
-	"fmt"
 )
 
 /*
@@ -15,7 +15,7 @@ RoundCosi implements the collective signature protocol using
 Schnorr signatures to collectively sign on a message. By default
 the message is only the collection of all Commits, but another
 round can add any message it wants in the Commitment-phase.
- */
+*/
 
 // The name type of this round implementation
 const RoundCosiType = "cosi"
@@ -56,6 +56,8 @@ func (round *RoundCosi) Announcement(viewNbr, roundNbr int, in *SigningMessage, 
 }
 
 func (round *RoundCosi) Commitment(in []*SigningMessage, out *SigningMessage) error {
+	dbg.Lvl3(round.Cosi.Name, "start cosi commit")
+
 	// prepare to handle exceptions
 	cosi := round.Cosi
 	cosi.Commits = in
@@ -113,6 +115,7 @@ func (round *RoundCosi) Commitment(in []*SigningMessage, out *SigningMessage) er
 }
 
 func (round *RoundCosi) Challenge(in *SigningMessage, out []*SigningMessage) error {
+	dbg.Lvl3(round.Cosi.Name, "start cosi challenge")
 
 	cosi := round.Cosi
 	// we are root
@@ -166,6 +169,7 @@ func (round *RoundCosi) Response(sms []*SigningMessage, out *SigningMessage) err
 	exceptionX_hat := round.Cosi.Suite.Point().Null()
 	round.Cosi.ExceptionList = make([]abstract.Point, 0)
 	nullPoint := round.Cosi.Suite.Point().Null()
+	dbg.Lvl3(round.Cosi.Name, "start cosi responses")
 
 	children := round.Cosi.Children
 	for _, sm := range sms {
@@ -173,7 +177,7 @@ func (round *RoundCosi) Response(sms []*SigningMessage, out *SigningMessage) err
 		switch sm.Type {
 		default:
 			// default == no response from child
-			// dbg.Lvl4(sn.Name(), "default in respose for child", from, sm)
+			dbg.LLvl4(round.Name, "default in respose for child", from, sm)
 			if children[from] != nil {
 				round.Cosi.ExceptionList = append(round.Cosi.ExceptionList, children[from].PubKey())
 
@@ -215,7 +219,7 @@ func (round *RoundCosi) Response(sms []*SigningMessage, out *SigningMessage) err
 	round.Cosi.ExceptionV_hat = exceptionV_hat
 	round.Cosi.ExceptionX_hat = exceptionX_hat
 
-	dbg.Lvl4(round.Cosi.Name, "got all responses")
+	dbg.Lvl3(round.Cosi.Name, "got all responses")
 	err := round.Cosi.VerifyResponses()
 	if err != nil {
 		dbg.Lvl3(round.Node.Name(), "Could not verify responses..")
@@ -226,6 +230,9 @@ func (round *RoundCosi) Response(sms []*SigningMessage, out *SigningMessage) err
 	out.Rm.ExceptionList = round.Cosi.ExceptionList
 	out.Rm.ExceptionV_hat = round.Cosi.ExceptionV_hat
 	out.Rm.ExceptionX_hat = round.Cosi.ExceptionX_hat
+	dbg.LLvlf3("out has %+v", out.Rm.ExceptionX_hat)
+	dbg.LLvlf3("temp hat is  %+v", exceptionX_hat)
+
 	return nil
 }
 

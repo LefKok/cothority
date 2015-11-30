@@ -116,8 +116,10 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 		}
 		round.bmux.Unlock()
 
+		//root starts roundcommit
+
 	} else {
-		if len(in.Chm.Message) > 0 {
+		if len(in.Chm.Message) > 0 { //can i poll this?
 			if err := json.Unmarshal(in.Chm.Message, &round.TempBlock); err != nil {
 
 				dbg.Fatal("Problem parsing TrBlock")
@@ -137,18 +139,30 @@ func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.Signing
 
 	if !round.IsRoot {
 		if round.verify_and_store(round.TempBlock) {
-			round.Last_Block = round.TempBlock.HeaderHash
-			dbg.LLvl3("Block Accepted %v", round.TempBlock.HeaderHash)
-		} else {
-			dbg.LLvl3("Block Rejected %v", round.TempBlock.HeaderHash)
+			round.Last_Block = round.TempBlock.HeaderHash //this should be done in round commit challenge phase
+			dbg.LLvlf3("Block Accepted %+v", round.TempBlock.HeaderHash)
+			round.RoundCosi.Response(in, out)
 
+		} else {
+
+			dbg.LLvlf3("Block Rejected %+v", round.TempBlock.HeaderHash)
+			round.Cosi.R_hat = round.Suite.Secret().Zero()
+			round.RoundCosi.Response(in, out)
+			dbg.LLvl3(out.Rm.ExceptionX_hat)
+			out.Rm.ExceptionX_hat.Add(out.Rm.ExceptionX_hat, round.Cosi.PubKey)
+			out.Rm.ExceptionV_hat.Add(out.Rm.ExceptionV_hat, round.Cosi.Log.V_hat)
 		}
 
+	} else {
+		round.RoundCosi.Response(in, out)
 	}
 
-	round.RoundCosi.Response(in, out)
+	//roots puts aggregated signature respose in a hash table in the stamplistener. The listener pools tha hash table in the round_commit challenge phase before continuing/// how can i make the other nodes to w8 in the challenge??
+
 	return nil
 }
+
+//should go to round_commit
 
 func (round *RoundPrepare) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
 	round.RoundCosi.SignatureBroadcast(in, out)
@@ -190,6 +204,6 @@ func (round *RoundPrepare) PutToClient(name string, data coconet.BinaryMarshaler
 
 func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock) bool {
 
-	return block.Header.Parent == round.Last_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.Hash(block.Header)
-
+	//return block.Header.Parent == round.Last_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.Hash(block.Header)
+	return false
 }
