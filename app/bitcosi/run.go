@@ -5,7 +5,6 @@ import (
 	"github.com/dedis/cothority/lib/app"
 	"github.com/dedis/cothority/lib/cliutils"
 	"github.com/dedis/cothority/lib/dbg"
-
 	"time"
 )
 
@@ -60,12 +59,14 @@ func Run(configFile, key string) {
 	}
 	peer = NewPeer(address, conf)
 	if peer.IsRoot(0) {
-		ticker := time.Tick(1 * time.Second)
+		ticker := time.Tick(5000 * time.Millisecond)
 		for {
 			select {
 			case <-ticker:
+				//dbg.LLvl1("Start Prepapre")
 				peer.StartAnnouncement(NewRoundPrepare(peer.Node))
-
+				//dbg.LLvl1("Start Commit")
+				peer.StartAnnouncement(NewRoundCommit(peer.Node))
 			}
 
 		}

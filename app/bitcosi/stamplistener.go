@@ -46,12 +46,16 @@ type StampListener struct {
 	READING    int
 	PROCESSING int
 
+	//coordination between rounds
+	TempBlock  BitCoSi.TrBlock
+	Last_Block string
+	Tempflag   bool
+
 	//transaction pool
 	trmux            sync.Mutex
 	transaction_pool []blkparser.Tx
 	IP               net.IP
 	PublicKey        string
-	Last_Block       string
 	bmux             sync.Mutex
 	blocks           []BitCoSi.TrBlock
 	NameL            string
@@ -92,6 +96,8 @@ func NewStampListener(nameP string) *StampListener {
 		sl.IP = net.IPv4(0, 1, 2, 3)
 		sl.PublicKey = "my_cool_key"
 		sl.Last_Block = "0"
+		sl.TempBlock = BitCoSi.TrBlock{}
+		sl.Tempflag = false
 		sl.transaction_pool = make([]blkparser.Tx, 0)
 		sl.blocks = make([]BitCoSi.TrBlock, 0)
 		sl.rLock = sync.Mutex{}

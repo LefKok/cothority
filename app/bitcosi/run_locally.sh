@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DBG=${4:-1}
+DBG=${4:-5}
 KEY_DIR=local_keys
 KEYS=$KEY_DIR/key
 HOSTLIST=$KEY_DIR/hostlist
@@ -22,4 +22,4 @@ cat $KEYS*.pub >> $HOSTLIST
 for a in $( seq 2 $NUMBER ); do
   ./$COMMAND -debug $DBG run -key $KEYS$a &
 done
-./$COMMAND -debug 5 run -key ${KEYS}1
+./$COMMAND -debug $DBG run -key ${KEYS}1

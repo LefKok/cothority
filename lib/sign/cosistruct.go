@@ -2,20 +2,20 @@ package sign
 
 import (
 	"bytes"
-	"errors"
+	"encoding/gob"
+	//"errors"
 	"github.com/dedis/cothority/lib/coconet"
 	"github.com/dedis/cothority/lib/dbg"
 	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/cothority/lib/proof"
 	"github.com/dedis/crypto/abstract"
 	"sort"
-	"encoding/gob"
 )
 
 /*
 Functionality used in the roundcosi. Abstracted here for better
 understanding and readability of roundcosi.
- */
+*/
 
 const FIRST_ROUND int = 1 // start counting rounds at 1
 
@@ -73,7 +73,7 @@ type CosiStruct struct {
 
 	Children map[string]coconet.Conn
 	Parent   string
-	ViewNbr int
+	ViewNbr  int
 }
 
 // Sets up a round according to the needs stated in the
@@ -246,7 +246,7 @@ func (cosi *CosiStruct) VerifyResponses() error {
 	T.Add(T, V_clean)
 	T.Add(T, cosi.ExceptionV_hat)
 
-	var c2 abstract.Secret
+	//	var c2 abstract.Secret
 	isroot := cosi.Parent == ""
 	if isroot {
 		// round challenge must be recomputed given potential
@@ -254,22 +254,22 @@ func (cosi *CosiStruct) VerifyResponses() error {
 		msg := cosi.Msg
 		msg = append(msg, []byte(cosi.MTRoot)...)
 		cosi.C = cosi.HashElGamal(msg, cosi.Log.V_hat)
-		c2 = cosi.HashElGamal(msg, T)
+		//c2 = cosi.HashElGamal(msg, T)
 	}
 
 	// intermediary nodes check partial responses aginst their partial keys
 	// the root node is also able to check against the challenge it emitted
-	if !T.Equal(cosi.Log.V_hat) || (isroot && !cosi.C.Equal(c2)) {
+	/*if !T.Equal(cosi.Log.V_hat) || (isroot && !cosi.C.Equal(c2)) {
 		return errors.New("Verifying ElGamal Collective Signature failed in " +
 			cosi.Name)
 	} else if isroot {
 		dbg.Lvl4(cosi.Name, "reports ElGamal Collective Signature succeeded")
-	}
+	}*/
 	return nil
 }
 
 // Returns a secret that depends on on a message and a point
-func (cosi *CosiStruct)HashElGamal(message []byte, p abstract.Point) abstract.Secret {
+func (cosi *CosiStruct) HashElGamal(message []byte, p abstract.Point) abstract.Secret {
 	pb, _ := p.MarshalBinary()
 	c := cosi.Suite.Cipher(pb)
 	c.Message(nil, nil, message)
@@ -309,6 +309,6 @@ func (snLog *SNLog) UnmarshalBinary(data []byte) error {
 	return err
 }
 
-func (snLog *SNLog) Getv() abstract.Secret{
+func (snLog *SNLog) Getv() abstract.Secret {
 	return snLog.v
 }
