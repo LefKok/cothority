@@ -24,10 +24,9 @@ type RoundPrepare struct {
 func (round *RoundPrepare) getblock(n int) (trb BitCoSi.TrBlock, _ error) {
 	if len(round.transaction_pool) > 0 {
 		trlist := BitCoSi.NewTransactionList(round.transaction_pool, n)
-		header := trb.NewHeader(trlist, round.Last_Block, round.IP, round.PublicKey)
+		header := trb.NewHeader(trlist, round.Last_Block, round.Last_Key_Block, round.IP, round.PublicKey)
 		trblock := trb.NewTrBlock(trlist, header)
 		round.transaction_pool = round.transaction_pool[trblock.TransactionList.TxCnt:]
-		//round.Last_Block = trblock.HeaderHash
 		return trblock, nil
 	} else {
 		return *new(BitCoSi.TrBlock), errors.New("no transaction available")
@@ -84,16 +83,16 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.SigningMessage) error {
 	if round.IsRoot {
 		round.bmux.Lock()
-		if round.Tempflag == true {
-			for _, o := range out {
-				var err error
-				o.Chm.Message, err = json.Marshal(round.TempBlock)
-				if err != nil {
 
-					dbg.Fatal("Problem sending TrBlock")
-				}
+		for _, o := range out {
+			var err error
+			o.Chm.Message, err = json.Marshal(round.TempBlock)
+			if err != nil {
+
+				dbg.Fatal("Problem sending TrBlock")
 			}
 		}
+
 		round.bmux.Unlock()
 
 		//root starts roundcommit
@@ -122,6 +121,7 @@ func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.Signing
 	//fix so that it does note enter when there is no new block
 
 	if !round.IsRoot {
+		round.TempBlock.Print()
 		if round.verify_and_store(round.TempBlock) {
 			//round.Last_Block = round.TempBlock.HeaderHash //this should be done in round commit challenge phase
 			dbg.LLvlf3("Block Accepted ", round.TempBlock.HeaderHash)
@@ -147,9 +147,16 @@ func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.Signing
 }
 
 func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock) bool {
-	//find a better hash function to makake header into bytes
-	return block.Header.Parent == round.Last_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) //&& block.HeaderHash == block.Hash(block.Header)
-	//return false
+	dbg.LLvl1("block parent is", block.Header.Parent)
+	dbg.LLvl1("round parent is", round.Last_Block)
+	dbg.LLvl1("block key parent is", block.Header.ParentKey)
+	dbg.LLvl1("round parent key is", round.Last_Key_Block)
+	dbg.LLvl1("block merkle is", block.Header.MerkleRoot)
+	dbg.LLvl1("calculated merkle is", block.Calculate_root(block.TransactionList))
+	dbg.LLvl1("block hash is", block.HeaderHash)
+	dbg.LLvl1("calculated hash is", block.Hash(block.Header))
+
+	return block.Header.Parent == round.Last_Block && block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.HeaderHash
 }
 
 func (round *RoundPrepare) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {

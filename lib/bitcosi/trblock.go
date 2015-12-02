@@ -10,7 +10,7 @@ import (
 	"net"
 )
 
-type TrBlock struct {
+type Block struct {
 	Magic      [4]byte
 	BlockSize  uint32
 	HeaderHash string
@@ -18,11 +18,16 @@ type TrBlock struct {
 	TransactionList
 }
 
+type TrBlock struct {
+	Block
+}
+
 type Header struct {
 	LeaderId   net.IP
 	PublicKey  string
 	MerkleRoot string
 	Parent     string
+	ParentKey  string
 }
 
 func (*TrBlock) NewTrBlock(transactions TransactionList, header Header) (tr TrBlock) {
@@ -35,16 +40,17 @@ func (*TrBlock) NewTrBlock(transactions TransactionList, header Header) (tr TrBl
 	return *trb
 }
 
-func (t *TrBlock) NewHeader(transactions TransactionList, parent string, IP net.IP, key string) (hd Header) {
+func (t *TrBlock) NewHeader(transactions TransactionList, parent string, parentkey string, IP net.IP, key string) (hd Header) {
 	hdr := new(Header)
 	hdr.LeaderId = IP
 	hdr.PublicKey = key
 	hdr.Parent = parent
+	hdr.ParentKey = parentkey
 	hdr.MerkleRoot = t.Calculate_root(transactions)
 	return *hdr
 }
 
-func (trb *TrBlock) Calculate_root(transactions TransactionList) (res string) {
+func (trb *Block) Calculate_root(transactions TransactionList) (res string) {
 	var hashes []hashid.HashId
 
 	for _, t := range transactions.Txs {
@@ -56,7 +62,7 @@ func (trb *TrBlock) Calculate_root(transactions TransactionList) (res string) {
 	return
 }
 
-func (trb *TrBlock) Hash(h Header) (res string) {
+func (trb *Block) Hash(h Header) (res string) {
 	//change it to be more portable
 	data := fmt.Sprintf("%v", h)
 	sha := sha256.New()
@@ -70,12 +76,12 @@ func (trb *TrBlock) Hash(h Header) (res string) {
 func (trb *TrBlock) Print() {
 	log.Println("Header:")
 	log.Printf("Leader %v", trb.LeaderId)
-	log.Printf("Pkey %v", trb.PublicKey)
+	//log.Printf("Pkey %v", trb.PublicKey)
 	log.Printf("Parent %v", trb.Parent)
+	log.Printf("ParentKey %v", trb.ParentKey)
 	log.Printf("Merkle %v", trb.MerkleRoot)
-	trb.TransactionList.Print()
-
-	log.Println("Rest:")
+	//trb.TransactionList.Print()
+	//log.Println("Rest:")
 	log.Printf("Hash %v", trb.HeaderHash)
 
 	return

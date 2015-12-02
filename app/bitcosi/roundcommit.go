@@ -44,21 +44,21 @@ func (round *RoundCommit) Commitment(in []*sign.SigningMessage, out *sign.Signin
 		//TODO count exceptions and check signatures if everything is ok prepare for release else ????
 		round.Mux.Lock()
 		// messages read will now be processed
-		round.Queue[READING], round.Queue[PROCESSING] = round.Queue[PROCESSING], round.Queue[READING]
-		round.Queue[READING] = round.Queue[READING][:0]
-		round.ClientQueue = make([]MustReplyMessage, len(round.Queue[PROCESSING]))
+		round.Queue[MICRO][READING], round.Queue[MICRO][PROCESSING] = round.Queue[MICRO][PROCESSING], round.Queue[MICRO][READING]
+		round.Queue[MICRO][READING] = round.Queue[MICRO][READING][:0]
+		round.ClientQueue = make([]MustReplyMessage, len(round.Queue[MICRO][PROCESSING]))
 
 		// get data from s once to avoid refetching from structure
 		round.Mux.Unlock()
 
 		dbg.LLvl1("ROUND COMMIT! commit?")
 
-		for i, q := range round.Queue[PROCESSING] {
+		for i, q := range round.Queue[MICRO][PROCESSING] {
 			//queue[i] = q.Tsm.Treq.Val
 			round.ClientQueue[i] = q
 			dbg.LLvl1(q)
 
-			round.ClientQueue[i].Block = round.TempBlock
+			round.ClientQueue[i].Block = round.TempBlock.Block
 		}
 
 		round.bmux.Lock()
@@ -130,11 +130,13 @@ func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningM
 			out.Rm.ExceptionX_hat.Add(out.Rm.ExceptionX_hat, round.Cosi.PubKey)
 			out.Rm.ExceptionV_hat.Add(out.Rm.ExceptionV_hat, round.Cosi.Log.V_hat)
 		}*/
+		round.Last_Block = round.TempBlock.HeaderHash
+
 		round.RoundCosi.Response(in, out) //delete
-		round.Last_Block = round.TempBlock.HeaderHash
 	} else {
-		round.RoundCosi.Response(in, out)
 		round.Last_Block = round.TempBlock.HeaderHash
+
+		round.RoundCosi.Response(in, out)
 	}
 
 	//roots puts aggregated signature respose in a hash table in the stamplistener. The listener pools tha hash table in the round_commit challenge phase before continuing/// how can i make the other nodes to w8 in the challenge??
@@ -161,7 +163,7 @@ func (round *RoundCommit) SignatureBroadcast(in *sign.SigningMessage, out []*sig
 				AggCommit:  in.SBm.V0_hat,
 				AggPublic:  in.SBm.X0_hat}}
 		round.PutToClient(msg.To, respMessg)
-		dbg.Lvlf1("Sent signature response back to %+v", respMessg.Brep)
+		//dbg.Lvlf1("Sent signature response back to %+v", respMessg.Brep)
 		round.bmux.Unlock()
 	}
 	return nil
@@ -180,7 +182,15 @@ func (round *RoundCommit) PutToClient(name string, data coconet.BinaryMarshaler)
 }
 
 func (round *RoundCommit) verify_and_store(block BitCoSi.TrBlock) bool {
+	dbg.LLvl1("block parent is", block.Header.Parent)
+	dbg.LLvl1("round parent is", round.Last_Block)
+	dbg.LLvl1("block key parent is", block.Header.ParentKey)
+	dbg.LLvl1("round parent key is", round.Last_Key_Block)
+	dbg.LLvl1("block merkle is", block.Header.MerkleRoot)
+	dbg.LLvl1("calculated merkle is", block.Calculate_root(block.TransactionList))
+	dbg.LLvl1("block hash is", block.HeaderHash)
+	dbg.LLvl1("calculated hash is", block.Hash(block.Header))
 
-	//return block.Header.Parent == round.Last_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.Hash(block.Header)
-	return false
+	return block.Header.Parent == round.Last_Block && block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.Hash(block.Header)
+	//return false
 }

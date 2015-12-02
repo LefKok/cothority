@@ -23,6 +23,7 @@ const (
 	TransactionAnnouncmentType
 	BlockReplyType
 	BlockRequestType
+	KeyBlockRequestType
 	BitCoSiClose
 	BitCoSiExit
 )
@@ -38,7 +39,7 @@ type BlockReply struct {
 	SuiteStr      string
 	Timestamp     int64           // The timestamp requested for the block to prove its ordering
 	BlockLen      int             // Length of Block
-	Block         TrBlock         // The Block including a number of transactions
+	Block         Block           // The Block including a number of transactions
 	MerkleRoot    []byte          // root of the merkle tree
 	PrfLen        int             // Length of proof
 	Prf           proof.Proof     // Merkle proof of value
@@ -60,9 +61,9 @@ type BitCoSiMessage struct {
 func (sr *BlockReply) MarshalJSON() ([]byte, error) {
 	type Alias BlockReply
 	var b bytes.Buffer
-	dbg.Print("Starting marshalling")
+	//dbg.Print("Starting marshalling")
 	suite := app.GetSuite(sr.SuiteStr)
-	dbg.Print("Preparing abstracts")
+	//dbg.Print("Preparing abstracts")
 	if err := suite.Write(&b, sr.Response, sr.Challenge, sr.AggCommit, sr.AggPublic); err != nil {
 		dbg.Lvl1("encoding stampreply response/challenge/AggCommit:", err)
 		return nil, err
@@ -101,8 +102,7 @@ func (sr *BlockReply) UnmarshalJSON(dataJSON []byte) error {
 		dbg.Print("Error in unmarshal:", err)
 		return err
 	}
-	dbg.Print("Preparing suites")
-	dbg.Print("suite.Read")
+	//dbg.Print("Preparing suites")
 	if err := suite.Read(bytes.NewReader(aux.SignatureInfo), &sr.Response, &sr.Challenge, &sr.AggCommit, &sr.AggPublic); err != nil {
 		dbg.Fatal("decoding signature Response / Challenge / AggCommit: ", err)
 		return err

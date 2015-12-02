@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DBG=${4:-5}
+DBG=${4:-1}
 KEY_DIR=local_keys
 KEYS=$KEY_DIR/key
 HOSTLIST=$KEY_DIR/hostlist

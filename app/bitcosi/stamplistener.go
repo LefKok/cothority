@@ -15,6 +15,8 @@ import (
 const (
 	READING = iota
 	PROCESSING
+	KEY
+	MICRO
 )
 
 // struct to ease keeping track of who requires a reply after
@@ -22,7 +24,7 @@ const (
 type MustReplyMessage struct {
 	Tsm   BitCoSi.BitCoSiMessage
 	To    string // name of reply destination
-	Block BitCoSi.TrBlock
+	Block BitCoSi.Block
 }
 
 /*
@@ -41,15 +43,20 @@ type StampListener struct {
 
 	// for aggregating micro-blockrequests from clients
 
-	Mux        sync.Mutex
-	Queue      [][]MustReplyMessage
-	READING    int
-	PROCESSING int
+	Mux            sync.Mutex
+	Queue          [][][]MustReplyMessage
+	READING        int
+	PROCESSING     int
+	READING_KEY    int
+	PROCESSING_KEY int
 
 	//coordination between rounds
 	TempBlock  BitCoSi.TrBlock
 	Last_Block string
 	Tempflag   bool
+
+	TempKeyBlock   BitCoSi.KeyBlock
+	Last_Key_Block string
 
 	//transaction pool
 	trmux            sync.Mutex
@@ -58,6 +65,7 @@ type StampListener struct {
 	PublicKey        string
 	bmux             sync.Mutex
 	blocks           []BitCoSi.TrBlock
+	keyblocks        []BitCoSi.KeyBlock
 	NameL            string
 	// The channel for closing the connection
 	waitClose chan string
@@ -87,21 +95,27 @@ func NewStampListener(nameP string) *StampListener {
 	if !ok {
 		sl = &StampListener{}
 		dbg.Lvl3("Creating new bitcosi-StampListener for", nameL)
-		sl.Queue = make([][]MustReplyMessage, 2)
-		sl.Queue[READING] = make([]MustReplyMessage, 0)
-		sl.Queue[PROCESSING] = make([]MustReplyMessage, 0)
-		sl.Clients = make(map[string]coconet.Conn)
-		sl.waitClose = make(chan string)
-		sl.NameL = nameL
 		sl.IP = net.IPv4(0, 1, 2, 3)
 		sl.PublicKey = "my_cool_key"
 		sl.Last_Block = "0"
+		sl.Last_Key_Block = "0"
 		sl.TempBlock = BitCoSi.TrBlock{}
+		sl.TempKeyBlock = BitCoSi.KeyBlock{}
 		sl.Tempflag = false
 		sl.transaction_pool = make([]blkparser.Tx, 0)
 		sl.blocks = make([]BitCoSi.TrBlock, 0)
+		sl.keyblocks = make([]BitCoSi.KeyBlock, 0)
 		sl.rLock = sync.Mutex{}
-
+		sl.Queue = make([][][]MustReplyMessage, 4)
+		sl.Queue[KEY] = make([][]MustReplyMessage, 2)
+		sl.Queue[KEY][READING] = make([]MustReplyMessage, 0)
+		sl.Queue[KEY][PROCESSING] = make([]MustReplyMessage, 0)
+		sl.Queue[MICRO] = make([][]MustReplyMessage, 2)
+		sl.Queue[MICRO][READING] = make([]MustReplyMessage, 0)
+		sl.Queue[MICRO][PROCESSING] = make([]MustReplyMessage, 0)
+		sl.Clients = make(map[string]coconet.Conn)
+		sl.waitClose = make(chan string)
+		sl.NameL = nameL
 		SLList[sl.NameL] = sl
 		sl.ListenRequests()
 	} else {
@@ -122,7 +136,7 @@ func (s *StampListener) ListenRequests() error {
 
 	go func() {
 		for {
-			dbg.Lvl2("Listening to sign-requests: %p", s)
+			//dbg.Lvl2("Listening to sign-requests: %p", s)
 			conn, err := s.Port.Accept()
 			if err != nil {
 				// handle error
@@ -159,7 +173,14 @@ func (s *StampListener) ListenRequests() error {
 							s.Mux.Lock()
 							dbg.Lvlf1("BlockRequest: %v\n", tsm.Type)
 							READING := s.READING
-							s.Queue[READING] = append(s.Queue[READING],
+							s.Queue[MICRO][READING] = append(s.Queue[MICRO][READING],
+								MustReplyMessage{Tsm: tsm, To: co.Name()})
+							s.Mux.Unlock()
+						case BitCoSi.KeyBlockRequestType:
+							s.Mux.Lock()
+							dbg.Lvlf1("KeyBlockRequest: %v\n", tsm.Type)
+							READING_KEY := s.READING_KEY
+							s.Queue[KEY][READING_KEY] = append(s.Queue[KEY][READING_KEY],
 								MustReplyMessage{Tsm: tsm, To: co.Name()})
 							s.Mux.Unlock()
 
