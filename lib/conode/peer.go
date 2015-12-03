@@ -6,10 +6,10 @@ import (
 
 	"github.com/dedis/cothority/lib/dbg"
 
-	"github.com/dedis/cothority/lib/sign"
+	"github.com/dedis/cothority/lib/app"
 	"github.com/dedis/cothority/lib/cliutils"
 	"github.com/dedis/cothority/lib/graphs"
-	"github.com/dedis/cothority/lib/app"
+	"github.com/dedis/cothority/lib/sign"
 	"github.com/dedis/crypto/abstract"
 	"strings"
 )
@@ -17,19 +17,19 @@ import (
 /*
 This will run rounds with RoundCosiStamper while listening for
 incoming requests through StampListener.
- */
+*/
 
 type Peer struct {
 	*sign.Node
 
-	conf      *app.ConfigConode
+	conf *app.ConfigConode
 
 	RLock     sync.Mutex
 	CloseChan chan bool
 	Closed    bool
 
-	Logger    string
-	Hostname  string
+	Logger   string
+	Hostname string
 }
 
 // NewPeer returns a peer that can be used to set up
@@ -63,11 +63,11 @@ func NewPeer(address string, conf *app.ConfigConode) *Peer {
 	// Listen to stamp-requests on port 2001
 	node := hc.Hosts[address]
 	peer := &Peer{
-		conf: conf,
-		Node: node,
-		RLock: sync.Mutex{},
+		conf:      conf,
+		Node:      node,
+		RLock:     sync.Mutex{},
 		CloseChan: make(chan bool, 5),
-		Hostname: address,
+		Hostname:  address,
 	}
 
 	// Start the cothority-listener on port 2000
@@ -92,6 +92,11 @@ func NewPeer(address string, conf *app.ConfigConode) *Peer {
 func (peer *Peer) LoopRounds(roundType string, rounds int) {
 	dbg.Lvl3("Stamp-server", peer.Node.Name(), "starting with IsRoot=", peer.IsRoot(peer.ViewNo))
 	ticker := time.NewTicker(sign.ROUND_TIME)
+	firstRound := peer.Node.LastRound()
+	if !peer.IsRoot(peer.ViewNo) {
+		// Children don't need to tick, only the root.
+		ticker.Stop()
+	}
 
 	for {
 		select {
@@ -101,9 +106,11 @@ func (peer *Peer) LoopRounds(roundType string, rounds int) {
 			dbg.Lvl3("Server-peer", peer.Name(), "has closed the connection")
 			return
 		case <-ticker.C:
-			if peer.LastRound() >= rounds && rounds >= 0 {
-				dbg.Lvl3(peer.Name(), "reports exceeded the max round: terminating",
-					peer.LastRound(), ">=", rounds)
+			dbg.Lvl3("Ticker is firing in", peer.Hostname)
+			roundNbr := peer.LastRound() - firstRound
+			if roundNbr >= rounds && rounds >= 0 {
+				dbg.Lvl3(peer.Name(), "reached max round: closing",
+					roundNbr, ">=", rounds)
 				ticker.Stop()
 				if peer.IsRoot(peer.ViewNo) {
 					dbg.Lvl3("As I'm root, asking everybody to terminate")
@@ -111,7 +118,8 @@ func (peer *Peer) LoopRounds(roundType string, rounds int) {
 				}
 			} else {
 				if peer.IsRoot(peer.ViewNo) {
-					dbg.Lvl3(peer.Name(), "Stamp server in round", peer.LastRound() + 1, "of", rounds)
+					dbg.Lvl2(peer.Name(), "Stamp server in round",
+						roundNbr+1, "of", rounds)
 					round, err := sign.NewRoundFromType(roundType, peer.Node)
 					if err != nil {
 						dbg.Fatal("Couldn't create", roundType, err)
@@ -131,8 +139,9 @@ func (peer *Peer) LoopRounds(roundType string, rounds int) {
 }
 
 // Sends the 'CloseAll' to everybody
-func (peer *Peer)SendCloseAll() {
+func (peer *Peer) SendCloseAll() {
 	peer.Node.CloseAll(peer.Node.ViewNo)
+	peer.Node.Close()
 }
 
 // Closes the channel
@@ -160,7 +169,7 @@ func convertTree(suite abstract.Suite, t *graphs.Tree) {
 
 		str, err := cliutils.PubHex(suite, point)
 		if err != nil {
-			dbg.Fatal("Could not encode point to hexadecimal ")
+			dbg.Fatal("Could not encode point to hexadecimal")
 		}
 		t.PubKey = str
 	}

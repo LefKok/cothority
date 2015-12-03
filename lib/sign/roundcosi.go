@@ -3,11 +3,11 @@ package sign
 import (
 	"github.com/dedis/cothority/lib/dbg"
 
-	"errors"
 	"fmt"
 	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/cothority/lib/proof"
 	"github.com/dedis/crypto/abstract"
+	"runtime/debug"
 )
 
 /*
@@ -22,7 +22,8 @@ const RoundCosiType = "cosi"
 
 type RoundCosi struct {
 	*RoundStruct
-	Cosi *CosiStruct
+	Cosi       *CosiStruct
+	SaveViewNo int
 }
 
 func init() {
@@ -38,6 +39,17 @@ func NewRoundCosi(node *Node) *RoundCosi {
 	return round
 }
 
+func (round *RoundCosi) CheckChildren() {
+	c := round.Node.Children(round.Node.ViewNo)
+	if len(c) != len(round.Cosi.Children) {
+		dbg.Print("Children in cosi and node are different")
+		dbg.Printf("round.Cosi: %+v", round.Cosi)
+		dbg.Printf("Node.Children: %+v", round.Node.Children(round.Node.ViewNo))
+		dbg.Print("viewNbr:", round.SaveViewNo, "Node.ViewNo:", round.Node.ViewNo)
+		debug.PrintStack()
+	}
+}
+
 // AnnounceFunc will keep the timestamp generated for this round
 func (round *RoundCosi) Announcement(viewNbr, roundNbr int, in *SigningMessage, out []*SigningMessage) error {
 	if err := round.Node.TryFailure(round.Node.ViewNo, roundNbr); err != nil {
@@ -47,6 +59,9 @@ func (round *RoundCosi) Announcement(viewNbr, roundNbr int, in *SigningMessage, 
 	// Store the message for the round
 	//round.Merkle = round.Node.MerkleStructs[roundNbr]
 	round.Cosi = NewCosi(round.Node, viewNbr, roundNbr, in.Am)
+	round.SaveViewNo = round.Node.ViewNo
+	round.CheckChildren()
+
 	round.Cosi.Msg = in.Am.Message
 	// Inform all children of announcement - just copy the one that came in
 	for i := range out {
@@ -56,12 +71,8 @@ func (round *RoundCosi) Announcement(viewNbr, roundNbr int, in *SigningMessage, 
 }
 
 func (round *RoundCosi) Commitment(in []*SigningMessage, out *SigningMessage) error {
-	dbg.Lvl3(round.Cosi.Name, "start cosi commit")
-
-	// prepare to handle exceptions
 	cosi := round.Cosi
 	cosi.Commits = in
-	cosi.ExceptionList = make([]abstract.Point, 0)
 
 	// Create the mapping between children and their respective public key + commitment
 	// V for commitment
@@ -85,7 +96,6 @@ func (round *RoundCosi) Commitment(in []*SigningMessage, out *SigningMessage) er
 		cosi.LeavesFrom = append(cosi.LeavesFrom, from)
 		cosi.ChildV_hat[from] = sm.Com.V_hat
 		cosi.ChildX_hat[from] = sm.Com.X_hat
-		cosi.ExceptionList = append(cosi.ExceptionList, sm.Com.ExceptionList...)
 
 		// Aggregation
 		// add good child server to combined public key, and point commit
@@ -105,17 +115,11 @@ func (round *RoundCosi) Commitment(in []*SigningMessage, out *SigningMessage) er
 	out.Com.V_hat = round.Cosi.Log.V_hat
 	out.Com.X_hat = round.Cosi.X_hat
 	out.Com.MTRoot = round.Cosi.MTRoot
-	out.Com.ExceptionList = round.Cosi.ExceptionList
-	out.Com.Messages = round.Node.Messages
-
-	// Reset message counter for statistics
-	round.Node.Messages = 0
 	return nil
 
 }
 
 func (round *RoundCosi) Challenge(in *SigningMessage, out []*SigningMessage) error {
-	dbg.Lvl3(round.Cosi.Name, "start cosi challenge")
 
 	cosi := round.Cosi
 	// we are root
@@ -145,8 +149,11 @@ func (round *RoundCosi) Challenge(in *SigningMessage, out []*SigningMessage) err
 	baseProof := make(proof.Proof, len(in.Chm.Proof))
 	copy(baseProof, in.Chm.Proof)
 
+	round.CheckChildren()
 	if len(cosi.Children) != len(out) {
-		return fmt.Errorf("Children and output are of different length")
+		return fmt.Errorf("Children (%d) and output (%d) are of different length. Should be %d / %d",
+			len(cosi.Children), len(out), len(round.Node.Children(round.Node.ViewNo)),
+			round.Node.ViewNo)
 	}
 	// for each child, create personalized part of proof
 	// embed it in SigningMessage, and send it
@@ -161,92 +168,29 @@ func (round *RoundCosi) Challenge(in *SigningMessage, out []*SigningMessage) err
 	return nil
 }
 
-// TODO make that sms == nil in case we are a leaf to stay consistent with
+// TODO make that in == nil in case we are a leaf to stay consistent with
 // others calls
-func (round *RoundCosi) Response(sms []*SigningMessage, out *SigningMessage) error {
-	// initialize exception handling
-	exceptionV_hat := round.Cosi.Suite.Point().Null()
-	exceptionX_hat := round.Cosi.Suite.Point().Null()
-	round.Cosi.ExceptionList = make([]abstract.Point, 0)
-	nullPoint := round.Cosi.Suite.Point().Null()
-	dbg.Lvl3(round.Cosi.Name, "start cosi responses")
-
-	children := round.Cosi.Children
-	for _, sm := range sms {
-		from := sm.From
-		switch sm.Type {
-		default:
-			// default == no response from child
-			dbg.LLvl4(round.Name, "default in respose for child", from, sm)
-			if children[from] != nil {
-				round.Cosi.ExceptionList = append(round.Cosi.ExceptionList, children[from].PubKey())
-
-				// remove public keys and point commits from subtree of failed child
-				exceptionX_hat.Add(exceptionX_hat, round.Cosi.ChildX_hat[from])
-				exceptionV_hat.Add(exceptionV_hat, round.Cosi.ChildV_hat[from])
-			}
-			continue
-		case Response:
-			// disregard response from children who did not commit
-			_, ok := round.Cosi.ChildV_hat[from]
-			if ok == true && round.Cosi.ChildV_hat[from].Equal(nullPoint) {
-				continue
-			}
-
-			// dbg.Lvl4(sn.Name(), "accepts response from", from, sm.Type)
-			round.Cosi.R_hat.Add(round.Cosi.R_hat, sm.Rm.R_hat)
-
-			exceptionV_hat.Add(exceptionV_hat, sm.Rm.ExceptionV_hat)
-
-			exceptionX_hat.Add(exceptionX_hat, sm.Rm.ExceptionX_hat)
-			round.Cosi.ExceptionList = append(round.Cosi.ExceptionList, sm.Rm.ExceptionList...)
-
-		case Error:
-			if sm.Err == nil {
-				dbg.Lvl2("Error message with no error")
-				continue
-			}
-
-			// Report up non-networking error, probably signature failure
-			dbg.Lvl2(round.Cosi.Name, "Error in respose for child", from, sm)
-			err := errors.New(sm.Err.Err)
-			return err
-		}
+func (round *RoundCosi) Response(in []*SigningMessage, out *SigningMessage) error {
+	dbg.Lvl4(round.Cosi.Name, "got all responses")
+	for _, sm := range in {
+		round.Cosi.R_hat.Add(round.Cosi.R_hat, sm.Rm.R_hat)
 	}
-
-	// remove exceptions from subtree that failed
-	round.Cosi.X_hat.Sub(round.Cosi.X_hat, exceptionX_hat)
-	round.Cosi.ExceptionV_hat = exceptionV_hat
-	round.Cosi.ExceptionX_hat = exceptionX_hat
-
-	dbg.Lvl3(round.Cosi.Name, "got all responses")
 	err := round.Cosi.VerifyResponses()
 	if err != nil {
 		dbg.Lvl3(round.Node.Name(), "Could not verify responses..")
 		return err
 	}
-
 	out.Rm.R_hat = round.Cosi.R_hat
-	out.Rm.ExceptionList = round.Cosi.ExceptionList
-	out.Rm.ExceptionV_hat = round.Cosi.ExceptionV_hat
-	out.Rm.ExceptionX_hat = round.Cosi.ExceptionX_hat
-	dbg.LLvlf3("out has %+v", out.Rm.ExceptionX_hat)
-	dbg.LLvlf3("temp hat is  %+v", exceptionX_hat)
-
 	return nil
 }
 
 func (round *RoundCosi) SignatureBroadcast(in *SigningMessage, out []*SigningMessage) error {
 	// Root is creating the sig broadcast
 	if round.IsRoot {
-		dbg.Lvl3(round.Node.Name(), ": sending number of messages:", round.Node.Messages)
 		in.SBm.R0_hat = round.Cosi.R_hat
 		in.SBm.C = round.Cosi.C
 		in.SBm.X0_hat = round.Cosi.X_hat
 		in.SBm.V0_hat = round.Cosi.Log.V_hat
-		in.SBm.Messages = round.Node.Messages
-	} else {
-		round.Node.Messages = in.SBm.Messages
 	}
 	// Inform all children of broadcast  - just copy the one that came in
 	for i := range out {

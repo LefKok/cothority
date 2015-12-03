@@ -4,14 +4,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/dedis/cothority/lib/dbg"
 	"golang.org/x/net/context"
 )
 
 /*
 DOESN'T WORK - needs to be implemented in a RoundVote
- */
+*/
 // HERE: after we change to the new view, we could send our parent
 // a notification that we are ready to use the new view
 
@@ -36,7 +35,7 @@ func (sn *Node) ApplyVote(v *Vote) {
 	case ShutdownVT:
 		sn.Close()
 	default:
-		log.Errorln("applyvote: unkown vote type")
+		dbg.Error("applyvote: unkown vote type")
 	}
 }
 
@@ -58,16 +57,17 @@ func (sn *Node) ApplyAction(view int, v *Vote) {
 		// not closing TCP connection on remove because if view
 		// does not go through, connection essential to old/ current view closed
 	default:
-		log.Errorln("applyvote: unkown action type")
+		dbg.Error("applyvote: unkown action type")
 	}
 }
 
 func (sn *Node) NotifyOfAction(view int, v *Vote) {
 	dbg.Lvl4(sn.Name(), "Notifying node to be added/removed of action")
 	gcm := &SigningMessage{
+		Suite:        sn.Suite().String(),
 		Type:         GroupChanged,
 		From:         sn.Name(),
-		ViewNbr:         view,
+		ViewNbr:      view,
 		LastSeenVote: int(sn.LastSeenVote),
 		Gcm: &GroupChangedMessage{
 			V:        v,
@@ -83,7 +83,7 @@ func (sn *Node) NotifyOfAction(view int, v *Vote) {
 			sn.PutTo(context.TODO(), v.Rv.Name, gcm)
 		}
 	default:
-		log.Errorln("notifyofaction: unkown action type")
+		dbg.Error("notifyofaction: unkown action type")
 	}
 }
 
@@ -99,7 +99,8 @@ func (sn *Node) AddSelf(parent string) error {
 		context.TODO(),
 		parent,
 		&SigningMessage{
-			Type: GroupChange,
+			Suite:   sn.Suite().String(),
+			Type:    GroupChange,
 			ViewNbr: -1,
 			Vrm: &VoteRequestMessage{
 				Vote: &Vote{
@@ -114,7 +115,8 @@ func (sn *Node) RemoveSelf() error {
 		context.TODO(),
 		int(sn.ViewNo),
 		&SigningMessage{
-			Type: GroupChange,
+			Suite:   sn.Suite().String(),
+			Type:    GroupChange,
 			ViewNbr: -1,
 			Vrm: &VoteRequestMessage{
 				Vote: &Vote{
@@ -130,6 +132,7 @@ func (sn *Node) CatchUp(vi int, from string) {
 	ctx := context.TODO()
 	sn.PutTo(ctx, from,
 		&SigningMessage{
+			Suite: sn.Suite().String(),
 			From:  sn.Name(),
 			Type:  CatchUpReq,
 			Cureq: &CatchUpRequest{Index: vi}})
@@ -145,13 +148,13 @@ func (sn *Node) StartGossip() {
 				c := sn.HostListOn(sn.ViewNo)
 				sn.viewmu.Unlock()
 				if len(c) == 0 {
-					log.Errorln(sn.Name(), "StartGossip: none in hostlist for view: ", sn.ViewNo, len(c))
+					dbg.Error(sn.Name(), "StartGossip: none in hostlist for view:", sn.ViewNo, len(c))
 					continue
 				}
 				sn.randmu.Lock()
 				from := c[sn.Rand.Int()%len(c)]
 				sn.randmu.Unlock()
-				dbg.Lvl4("Gossiping with: ", from)
+				dbg.Lvl4("Gossiping with:", from)
 				sn.CatchUp(int(atomic.LoadInt64(&sn.LastAppliedVote)+1), from)
 			case <-sn.closed:
 				dbg.Lvl3("stopping gossip: closed")

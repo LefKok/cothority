@@ -46,7 +46,7 @@ func Lvld(lvl int, args ...interface{}) {
 	Lvl(lvl, args...)
 }
 func Lvl(lvl int, args ...interface{}) {
-	if lvl > DebugVisible{
+	if lvl > DebugVisible {
 		return
 	}
 	pc, _, line, _ := runtime.Caller(3)
@@ -72,15 +72,7 @@ func Lvl(lvl int, args ...interface{}) {
 		caller += "@" + StaticMsg
 	}
 	message := fmt.Sprintln(args...)
-	if lvl <= DebugVisible {
-		fmt.Printf("%d: (%s) - %s", lvl, caller, message)
-	} else {
-		if len(message) > 2048 && DebugVisible > 1 {
-			fmt.Printf("%d: (%s) - HUGE message of %d bytes not printed\n", lvl, caller, len(message))
-		}
-		return
-	}
-
+	fmt.Printf("%d: (%s) - %s", lvl, caller, message)
 }
 
 func Lvlf(lvl int, f string, args ...interface{}) {
@@ -117,7 +109,6 @@ func Lvl5(args ...interface{}) {
 
 func Error(args ...interface{}) {
 	Lvld(0, args...)
-	os.Exit(1)
 }
 
 func Fatal(args ...interface{}) {
@@ -181,11 +172,11 @@ func TestOutput(show bool, level int) {
 // Just add an additional "L" in front, and remove it later:
 // - easy hack to turn on other debug-messages
 // - easy removable by searching/replacing 'LLvl' with 'Lvl'
-func LLvl1(args ...interface{}) { Lvld(-1, args...) }
-func LLvl2(args ...interface{}) { Lvld(-1, args...) }
-func LLvl3(args ...interface{}) { Lvld(-1, args...) }
-func LLvl4(args ...interface{}) { Lvld(-1, args...) }
-func LLvl5(args ...interface{}) { Lvld(-1, args...) }
+func LLvl1(args ...interface{})            { Lvld(-1, args...) }
+func LLvl2(args ...interface{})            { Lvld(-1, args...) }
+func LLvl3(args ...interface{})            { Lvld(-1, args...) }
+func LLvl4(args ...interface{})            { Lvld(-1, args...) }
+func LLvl5(args ...interface{})            { Lvld(-1, args...) }
 func LLvlf1(f string, args ...interface{}) { Lvlf(-1, f, args...) }
 func LLvlf2(f string, args ...interface{}) { Lvlf(-1, f, args...) }
 func LLvlf3(f string, args ...interface{}) { Lvlf(-1, f, args...) }

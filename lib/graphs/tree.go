@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"github.com/dedis/crypto/abstract"
 	"github.com/dedis/cothority/lib/dbg"
+	"github.com/dedis/crypto/abstract"
 )
 
 // tree easy to deal with
@@ -43,7 +43,7 @@ func (t *Tree) TraverseTree(f func(*Tree)) {
 // bfs style
 func CreateLocalTree(nodeNames []string, bf int) *Tree {
 	if bf < 1 {
-		panic("Branching Factor < 1 in CreateLocalTree :/")
+		panic("Branching Factor < 1 in CreateLocalTree:/")
 	}
 	var root *Tree = new(Tree)
 	root.Name = nodeNames[0]

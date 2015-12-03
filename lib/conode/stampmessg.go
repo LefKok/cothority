@@ -15,7 +15,7 @@ import (
 
 /*
 All messages for stamper-related actions
- */
+*/
 
 // struct to ease keeping track of who requires a reply after
 // tsm is processed/ aggregated by the TSServer
@@ -44,7 +44,7 @@ type StampRequest struct {
 	Val []byte // Hash-size value to timestamp
 }
 
-// NOTE: In order to decoe correctly the Proof, we need to the get the suite
+// NOTE: In order to decode correctly the Proof, we need to the get the suite
 // somehow. We could just simply add it as a field and not (un)marhsal it
 // We'd just make sure that the suite is setup before unmarshaling.
 type StampSignature struct {
@@ -68,6 +68,7 @@ func (Sreq *StampRequest) UnmarshalBinary(data []byte) error {
 }
 
 func (sr *StampSignature) MarshalJSON() ([]byte, error) {
+	type Alias StampSignature
 	var b bytes.Buffer
 	suite := app.GetSuite(sr.SuiteStr)
 	if err := suite.Write(&b, sr.Response, sr.Challenge, sr.AggCommit, sr.AggPublic); err != nil {
@@ -76,38 +77,37 @@ func (sr *StampSignature) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(&struct {
-		SignatureInfo []byte
-		Timestamp     int64
-		MerkleRoot    []byte
-		Prf           proof.Proof
+		BinaryBlob []byte
+		*Alias
 	}{
-		SignatureInfo: b.Bytes(),
-		Timestamp:     sr.Timestamp,
-		MerkleRoot:    sr.MerkleRoot,
-		Prf:           sr.Prf,
+		BinaryBlob: b.Bytes(),
+		Alias:      (*Alias)(sr),
 	})
 }
 
 func (sr *StampSignature) UnmarshalJSON(dataJSON []byte) error {
+	type Alias StampSignature
+	suite := app.GetSuite(sr.SuiteStr)
 	aux := &struct {
-		SignatureInfo []byte
-		Timestamp     int64
-		MerkleRoot    []byte
-		Prf           proof.Proof
-	}{}
+		BinaryBlob []byte
+		Response   abstract.Secret
+		Challenge  abstract.Secret
+		AggCommit  abstract.Point
+		AggPublic  abstract.Point
+		*Alias
+	}{
+		Response:  suite.Secret(),
+		Challenge: suite.Secret(),
+		AggCommit: suite.Point(),
+		AggPublic: suite.Point(),
+		Alias:     (*Alias)(sr),
+	}
 	if err := json.Unmarshal(dataJSON, &aux); err != nil {
 		return err
 	}
-	suite := app.GetSuite(sr.SuiteStr)
-	sr.Timestamp = aux.Timestamp
-	sr.MerkleRoot = aux.MerkleRoot
-	sr.Prf = aux.Prf
-	sr.Response = suite.Secret()
-	sr.Challenge = suite.Secret()
-	sr.AggCommit = suite.Point()
-	sr.AggPublic = suite.Point()
-	if err := suite.Read(bytes.NewReader(aux.SignatureInfo), &sr.Response, &sr.Challenge, &sr.AggCommit, &sr.AggPublic); err != nil {
-		dbg.Fatal("decoding signature Response / Challenge / AggCommit: ", err)
+	if err := suite.Read(bytes.NewReader(aux.BinaryBlob), &sr.Response,
+		&sr.Challenge, &sr.AggCommit, &sr.AggPublic); err != nil {
+		dbg.Fatal("decoding signature Response / Challenge / AggCommit:", err)
 		return err
 	}
 	return nil
@@ -141,16 +141,16 @@ func (sr *StampSignature) Save(file string) error {
 	var bufCommit bytes.Buffer
 	var bufPublic bytes.Buffer
 	if err := cliutils.WriteSecret64(suite, &bufChall, sr.Challenge); err != nil {
-		return fmt.Errorf("Could not write secret challenge :", err)
+		return fmt.Errorf("Could not write secret challenge:", err)
 	}
 	if err := cliutils.WriteSecret64(suite, &bufResp, sr.Response); err != nil {
-		return fmt.Errorf("Could not write secret response : ", err)
+		return fmt.Errorf("Could not write secret response:", err)
 	}
 	if err := cliutils.WritePub64(suite, &bufCommit, sr.AggCommit); err != nil {
-		return fmt.Errorf("Could not write aggregated commitment : ", err)
+		return fmt.Errorf("Could not write aggregated commitment:", err)
 	}
 	if err := cliutils.WritePub64(suite, &bufPublic, sr.AggPublic); err != nil {
-		return fmt.Errorf("Could not write aggregated public key : ", err)
+		return fmt.Errorf("Could not write aggregated public key:", err)
 	}
 	// Signature file struct containing everything needed
 	sigStr := &sigFile{
@@ -193,14 +193,14 @@ func (sr *StampSignature) Open(file string) error {
 	// Read the root, the challenge and response
 	sr.MerkleRoot, err = base64.StdEncoding.DecodeString(sigStr.MerkleRoot)
 	if err != nil {
-		fmt.Errorf("Could not decode Merkle Root from sig file :", err)
+		fmt.Errorf("Could not decode Merkle Root from sig file:", err)
 	}
 	sr.Response, err = cliutils.ReadSecret64(suite, strings.NewReader(sigStr.Response))
 	if err != nil {
-		fmt.Errorf("Could not read secret challenge : ", err)
+		fmt.Errorf("Could not read secret challenge:", err)
 	}
 	if sr.Challenge, err = cliutils.ReadSecret64(suite, strings.NewReader(sigStr.Challenge)); err != nil {
-		fmt.Errorf("Could not read the aggregate commitment :", err)
+		fmt.Errorf("Could not read the aggregate commitment:", err)
 	}
 	if sr.AggCommit, err = cliutils.ReadPub64(suite, strings.NewReader(sigStr.AggCommitment)); err != nil {
 		return err

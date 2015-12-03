@@ -81,7 +81,7 @@ func (hc *HostConfig) String() string {
 	err := json.Indent(bformatted, b.Bytes(), "", "\t")
 	if err != nil {
 		dbg.Lvl3(string(b.Bytes()))
-		dbg.Lvl3("ERROR: ", err)
+		dbg.Lvl3("ERROR:", err)
 	}
 
 	return string(bformatted.Bytes())
@@ -94,9 +94,9 @@ func writeHC(b *bytes.Buffer, hc *HostConfig, p *sign.Node) error {
 	}
 	prk, _ := p.PrivKey.MarshalBinary()
 	pbk, _ := p.PubKey.MarshalBinary()
-	fmt.Fprint(b, "{\"name\":", "\"" + p.Name() + "\",")
-	fmt.Fprint(b, "\"prikey\":", "\"" + string(hex.EncodeToString(prk)) + "\",")
-	fmt.Fprint(b, "\"pubkey\":", "\"" + string(hex.EncodeToString(pbk)) + "\",")
+	fmt.Fprint(b, "{\"name\":", "\""+p.Name()+"\",")
+	fmt.Fprint(b, "\"prikey\":", "\""+string(hex.EncodeToString(prk))+"\",")
+	fmt.Fprint(b, "\"pubkey\":", "\""+string(hex.EncodeToString(pbk))+"\",")
 
 	// recursively format children
 	fmt.Fprint(b, "\"children\":[")
@@ -140,14 +140,14 @@ func max(a, b int) int {
 // config file. ConstructTree must be called AFTER populating the HostConfig with
 // ALL the possible hosts.
 func ConstructTree(
-node *Tree,
-hc *HostConfig,
-parent string,
-suite abstract.Suite,
-rand cipher.Stream,
-hosts map[string]coconet.Host,
-nameToAddr map[string]string,
-opts ConfigOptions) (int, error) {
+	node *Tree,
+	hc *HostConfig,
+	parent string,
+	suite abstract.Suite,
+	rand cipher.Stream,
+	hosts map[string]coconet.Host,
+	nameToAddr map[string]string,
+	opts ConfigOptions) (int, error) {
 	// passes up its X_hat, and/or an error
 
 	// get the name associated with this address
@@ -218,14 +218,14 @@ opts ConfigOptions) (int, error) {
 			hc.SNodes = append(hc.SNodes, sn)
 			h.SetPubKey(sn.PubKey)
 		}
-		sn = hc.SNodes[len(hc.SNodes) - 1]
+		sn = hc.SNodes[len(hc.SNodes)-1]
 		hc.Hosts[name] = sn
 		if prikey == nil {
 			prikey = sn.PrivKey
 			pubkey = sn.PubKey
 		}
 		// dbg.Lvl4("pubkey:", sn.PubKey)
-		// dbg.Lvl4("given: ", pubkey)
+		// dbg.Lvl4("given:", pubkey)
 	}
 	// if the parent of this call is empty then this must be the root node
 	if parent != "" && generate {
@@ -233,9 +233,9 @@ opts ConfigOptions) (int, error) {
 		h.AddParent(0, parent)
 	}
 
-	// dbg.Lvl4("name: ", n.Name)
-	// dbg.Lvl4("prikey: ", prikey)
-	// dbg.Lvl4("pubkey: ", pubkey)
+	// dbg.Lvl4("name:", n.Name)
+	// dbg.Lvl4("prikey:", prikey)
+	// dbg.Lvl4("pubkey:", pubkey)
 	height := 0
 	for _, c := range node.Children {
 		// connect this node to its children
@@ -257,16 +257,16 @@ opts ConfigOptions) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		height = max(h + 1, height)
+		height = max(h+1, height)
 		// if generating all csn will be availible
 	}
 	if generate {
 		sn.Height = height
 	}
 
-	// dbg.Lvl4("name: ", n.Name)
-	// dbg.Lvl4("final x_hat: ", x_hat)
-	// dbg.Lvl4("final pubkey: ", pubkey)
+	// dbg.Lvl4("name:", n.Name)
+	// dbg.Lvl4("final x_hat:", x_hat)
+	// dbg.Lvl4("final pubkey:", pubkey)
 	return height, nil
 }
 
@@ -316,8 +316,8 @@ type ConfigOptions struct {
 	Faulty    bool           // if true, use FaultyHost wrapper around Hosts
 	Suite     abstract.Suite // suite to use for Hosts
 	NoTree    bool           // bool flag to tell wether we want to construct
-							 // the tree or not. Setting this to false will
-							 // construct the tree. True will not.
+	// the tree or not. Setting this to false will
+	// construct the tree. True will not.
 }
 
 // run the given hostnames
@@ -418,10 +418,10 @@ func LoadConfig(appHosts []string, appTree *Tree, suite abstract.Suite, optsSlic
 			if opts.GenHosts {
 				p := strconv.Itoa(StartConfigPort)
 				addr = localAddr + ":" + p
-				//dbg.Lvl4("created new host address: ", addr)
+				//dbg.Lvl4("created new host address:", addr)
 				StartConfigPort += 10
 			} else if opts.Port != "" {
-				dbg.Lvl4("attempting to rewrite port: ", opts.Port)
+				dbg.Lvl4("attempting to rewrite port:", opts.Port)
 				// if the port has been specified change the port
 				hostport := strings.Split(addr, ":")
 				dbg.Lvl4(hostport)
@@ -451,7 +451,7 @@ func LoadConfig(appHosts []string, appTree *Tree, suite abstract.Suite, optsSlic
 		}
 	}
 
-	//suite := edwards.NewAES128SHA256Ed25519(true)
+	//suite := edwards.NewAES128SHA256Ed25519(false)
 	//suite := nist.NewAES128SHA256P256()
 	rand := suite.Cipher([]byte("example"))
 	//dbg.Lvl3("hosts", hosts)

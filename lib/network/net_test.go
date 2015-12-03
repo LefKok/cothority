@@ -63,7 +63,7 @@ func (s *SimpleClient) ExchangeWithServer(name string, t *testing.T) {
 	// Send it
 	err := c.Send(p)
 	if err != nil {
-		t.Error("error sending from client : ", err)
+		t.Error("error sending from client:", err)
 	}
 
 	// Receive the response
@@ -117,7 +117,7 @@ func (s *SimpleServer) Init(host Host, pub abstract.Point, t *testing.T) *Simple
 func TestTcpNetwork(t *testing.T) {
 	clientHost := NewTcpHost("127.0.0.1")
 	serverHost := NewTcpHost("127.0.0.1")
-	suite := edwards.NewAES128SHA256Ed25519(true)
+	suite := edwards.NewAES128SHA256Ed25519(false)
 	Suite = suite
 	clientPub := suite.Point().Base()
 	serverPub := suite.Point().Add(suite.Point().Base(), suite.Point().Base())

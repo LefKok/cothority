@@ -2,17 +2,19 @@ package main
 
 import (
 	"github.com/codegangsta/cli"
-	"github.com/dedis/cothority/lib/conode"
 	"github.com/dedis/cothority/lib/app"
 	"github.com/dedis/cothority/lib/cliutils"
+	"github.com/dedis/cothority/lib/conode"
 	"github.com/dedis/cothority/lib/dbg"
 )
+
+var maxRounds = -1
 
 func init() {
 	command := cli.Command{
 		Name:    "run",
 		Aliases: []string{"r"},
-		Usage:   "Run this conode inside the cothority tree.",
+		Usage:   "Runs the CoNode and connects it to the cothority tree as specified in the config file",
 		Action: func(c *cli.Context) {
 			Run(c.String("config"), c.String("key"))
 		},
@@ -40,21 +42,21 @@ func Run(configFile, key string) {
 	// Read the global config
 	conf := &app.ConfigConode{}
 	if err := app.ReadTomlConfig(conf, configFile); err != nil {
-		dbg.Fatal("Could not read toml config... : ", err)
+		dbg.Fatal("Could not read toml config:", err)
 	}
 	dbg.Lvl1("Configuration file read")
 	// Read the private / public keys + binded address
 	if sec, err := cliutils.ReadPrivKey(suite, namePriv(key)); err != nil {
-		dbg.Fatal("Error reading private key file  :", err)
+		dbg.Fatal("Error reading private key file:", err)
 	} else {
 		conf.Secret = sec
 	}
 	if pub, addr, err := cliutils.ReadPubKey(suite, namePub(key)); err != nil {
-		dbg.Fatal("Error reading public key file :", err)
+		dbg.Fatal("Error reading public key file:", err)
 	} else {
 		conf.Public = pub
 		address = addr
 	}
 	peer := conode.NewPeer(address, conf)
-	peer.LoopRounds("cosistamper", -1)
+	peer.LoopRounds(RoundStatsType, maxRounds)
 }

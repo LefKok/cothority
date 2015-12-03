@@ -16,12 +16,13 @@ import (
 	"github.com/dedis/cothority/lib/app"
 	"github.com/dedis/cothority/lib/coconet"
 	"github.com/dedis/cothority/lib/hashid"
+	"github.com/dedis/cothority/lib/sign"
 )
 
 var muStats sync.Mutex
 
 var MAX_N_SECONDS int = 1 * 60 * 60 // 1 hours' worth of seconds
-var MAX_N_ROUNDS int = MAX_N_SECONDS / int(ROUND_TIME/time.Second)
+var MAX_N_ROUNDS int = MAX_N_SECONDS / int(sign.ROUND_TIME/time.Second)
 
 func RunClient(flags *app.Flags, conf *app.ConfigColl) {
 	dbg.Lvl4("Starting to run stampclient")
@@ -104,7 +105,7 @@ func streamMessgs(c *Client, servers []string, rate int) {
 		return
 	}
 	ticker := time.NewTicker(time.Second / time.Duration(rate))
-	dbg.Lvl2(c.Name(), "streaming at given rate", rate, " msg / s")
+	dbg.Lvl2(c.Name(), "streaming at given rate", rate, "msg / s")
 	msg := genRandomMessages(1)[0]
 
 	i := 0
@@ -143,7 +144,7 @@ retry:
 				return
 			} else if err != nil {
 				// ignore errors
-				dbg.Lvl4("Client", c.Name(), "Leaving out streamMessages. ", err)
+				dbg.Lvl4("Client", c.Name(), "Leaving out streamMessages.", err)
 				return
 			}
 

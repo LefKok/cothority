@@ -19,30 +19,30 @@ import (
 var _ Host = &TCPHost{}
 
 type TCPHost struct {
-	name         string
-	listener     net.Listener
+	name     string
+	listener net.Listener
 
-	views        *Views
+	views *Views
 
-	PeerLock     sync.RWMutex
-	peers        map[string]Conn
-	Ready        map[string]bool
+	PeerLock sync.RWMutex
+	peers    map[string]Conn
+	Ready    map[string]bool
 
-								// Peers asking to join overall tree structure of nodes
-								// via connection to current host node
+	// Peers asking to join overall tree structure of nodes
+	// via connection to current host node
 	PendingPeers map[string]bool
 
-	pkLock       sync.RWMutex
-	Pubkey       abstract.Point // own public key
+	pkLock sync.RWMutex
+	Pubkey abstract.Point // own public key
 
-	pool         *sync.Pool
-	suite        abstract.Suite
+	pool  *sync.Pool
+	suite abstract.Suite
 
-								// channels to send on Get() and update
-	msgchan      chan NetworkMessg
+	// channels to send on Get() and update
+	msgchan chan NetworkMessg
 
-								// 1 if closed, 0 if not closed
-	closed       int64
+	// 1 if closed, 0 if not closed
+	closed int64
 }
 
 // NewTCPHost creates a new TCPHost with a given hostname.
@@ -105,11 +105,11 @@ func (h *TCPHost) Listen() error {
 	dbg.Lvl3("Starting to listen on", h.name)
 	address, err := cliutils.GlobalBind(h.name)
 	if err != nil {
-		dbg.Fatal("Didn't get global binding for ", address, err)
+		dbg.Fatal("Didn't get global binding for", address, err)
 	}
 	ln, err := net.Listen("tcp4", address)
 	if err != nil {
-		dbg.Lvl2("failed to listen on ", address, ":", err)
+		dbg.Lvl2("failed to listen on", address, ":", err)
 		return err
 	}
 	h.listener = ln
@@ -120,7 +120,7 @@ func (h *TCPHost) Listen() error {
 			conn, err := ln.Accept()
 			dbg.Lvl3(h.Name(), "Connection request - handling")
 			if err != nil {
-				dbg.Lvl3("failed to accept connection: ", err)
+				dbg.Lvl3("failed to accept connection:", err)
 				// if the host has been closed then stop listening
 				if atomic.LoadInt64(&h.closed) == 1 {
 					return
@@ -133,7 +133,7 @@ func (h *TCPHost) Listen() error {
 			var mname StringMarshaler
 			err = tp.GetData(&mname)
 			if err != nil {
-				log.Errorln("failed to establish connection: getting name: ", err)
+				log.Errorln("failed to establish connection: getting name:", err)
 				tp.Close()
 				continue
 			}

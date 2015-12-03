@@ -1,25 +1,26 @@
 package conode
+
 import (
-	"github.com/dedis/cothority/lib/sign"
-	"github.com/dedis/cothority/lib/dbg"
-	"encoding/binary"
 	"bytes"
-	"time"
-	"strconv"
-	"github.com/dedis/cothority/lib/proof"
+	"encoding/binary"
+	"github.com/dedis/cothority/lib/dbg"
 	"github.com/dedis/cothority/lib/hashid"
+	"github.com/dedis/cothority/lib/proof"
+	"github.com/dedis/cothority/lib/sign"
+	"strconv"
+	"time"
 )
 
 /*
 Implements a merkle-tree hasher for incoming messages that
 are passed to roundcosi.
- */
+*/
 
 const RoundStamperType = "stamper"
 
 type RoundStamper struct {
 	*sign.RoundCosi
-	Timestamp   int64
+	Timestamp int64
 
 	Proof       []hashid.HashId // the inclusion-proof of the data
 	MTRoot      hashid.HashId   // mt root for subtree, passed upwards
@@ -38,7 +39,7 @@ func init() {
 }
 
 func NewRoundStamper(node *sign.Node) *RoundStamper {
-	dbg.Lvlf3("Making new roundcosistamper %+v", node)
+	dbg.Lvlf3("Making new stamperlistener %+v", node)
 	round := &RoundStamper{}
 	round.RoundCosi = sign.NewRoundCosi(node)
 	round.Type = RoundStamperType
@@ -47,7 +48,6 @@ func NewRoundStamper(node *sign.Node) *RoundStamper {
 
 func (round *RoundStamper) Announcement(viewNbr, roundNbr int, in *sign.SigningMessage, out []*sign.SigningMessage) error {
 	dbg.Lvl3("New roundstamper announcement in round-nbr", roundNbr)
-	in.Am.RoundType = RoundCosiStamperType
 	if round.IsRoot {
 		// We are root !
 		// Adding timestamp
@@ -87,11 +87,11 @@ func (round *RoundStamper) Commitment(in []*sign.SigningMessage, out *sign.Signi
 		round.StampRoot, round.StampProofs = proof.ProofTree(round.Suite.Hash, round.StampLeaves)
 		if dbg.DebugVisible > 2 {
 			if proof.CheckLocalProofs(round.Suite.Hash, round.StampRoot, round.StampLeaves, round.StampProofs) == true {
-				dbg.Lvl4("Local Proofs of", round.Name, "successful for round " +
-				strconv.Itoa(round.RoundNbr))
+				dbg.Lvl4("Local Proofs of", round.Name, "successful for round "+
+					strconv.Itoa(round.RoundNbr))
 			} else {
 				panic("Local Proofs" + round.Name + " unsuccessful for round " +
-				strconv.Itoa(round.RoundNbr))
+					strconv.Itoa(round.RoundNbr))
 			}
 		}
 	}
@@ -136,4 +136,3 @@ func (round *RoundStamper) SignatureBroadcast(in *sign.SigningMessage, out []*si
 	}
 	return nil
 }
-

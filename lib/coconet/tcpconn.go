@@ -5,12 +5,13 @@ import (
 	"errors"
 	"net"
 	"sync"
-//"runtime/debug"
+	//"runtime/debug"
 
 	"github.com/dedis/cothority/lib/dbg"
 
 	"github.com/dedis/crypto/abstract"
 	"io"
+	"strings"
 )
 
 var Latency = 100
@@ -25,10 +26,10 @@ type TCPConn struct {
 	dec     *json.Decoder
 
 	// pkLock guards the public key
-	pkLock  sync.Mutex
-	pubkey  abstract.Point
+	pkLock sync.Mutex
+	pubkey abstract.Point
 
-	closed  bool
+	closed bool
 }
 
 // NewTCPConnFromNet wraps a net.Conn creating a new TCPConn using conn as the
@@ -167,11 +168,13 @@ func (tc *TCPConn) GetData(bum BinaryUnmarshaler) error {
 		}
 		// if it is an irrecoverable error
 		// close the channel and return that it has been closed
-		if err != io.EOF && err.Error() != "read tcp4" {
-			dbg.Lvl3("Couldn't decode packet at", tc.name, "error:", err)
-			dbg.Lvlf3("Packet is %+v", bum)
+		if err == io.EOF || err.Error() == "read tcp4" {
+			dbg.Lvl3("Closing connection by EOF:", err)
 		} else {
-			dbg.Lvl3("Closing connection by EOF: ", err)
+			if !strings.Contains(err.Error(), "use of closed") {
+				dbg.Lvl1("Couldn't decode packet at", tc.name, "error:", err)
+				dbg.Lvlf1("Packet was: %+v", bum)
+			}
 		}
 		tc.Close()
 		return ErrClosed

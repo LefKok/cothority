@@ -36,7 +36,7 @@ func main() {
 			dbg.Lvl3("Starting", name, "on", app.RunFlags.PhysAddr)
 			wg.Add(1)
 			go func(nameport string) {
-				dbg.LLvl3("Running on", app.RunFlags.PhysAddr, "starting", nameport, rootname)
+				dbg.Lvl3("Running on", app.RunFlags.PhysAddr, "starting", nameport, rootname)
 				defer wg.Done()
 
 				amroot := nameport == rootname
@@ -66,7 +66,7 @@ func main() {
 	} else {
 		dbg.Lvl2("No apps for", app.RunFlags.PhysAddr)
 	}
-	dbg.Lvl2(app.RunFlags.PhysAddr, "apps exited")
+	dbg.Lvl2(app.RunFlags.PhysAddr, "forkexec exited")
 }
 
 func setup_deter() {
