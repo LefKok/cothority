@@ -14,51 +14,51 @@ import (
 Implements a BitCoSI Prepare and a Cosi-round
 */
 
-const RoundPrepareType = "prepare"
+const RoundKeyPrepareType = "keyprepare"
 
-type RoundPrepare struct {
+type RoundKeyPrepare struct {
 	*StampListener
 	*sign.RoundException
 }
 
-func (round *RoundPrepare) getblock(n int) (trb BitCoSi.TrBlock, _ error) {
+func (round *RoundKeyPrepare) getblock(n int) (trb BitCoSi.KeyBlock, _ error) {
 	if len(round.transaction_pool) > 0 {
 		trlist := BitCoSi.NewTransactionList(round.transaction_pool, n)
-		header := trb.NewHeader(trlist, round.Last_Block, round.Last_Key_Block, round.IP, round.PublicKey)
-		trblock := trb.NewTrBlock(trlist, header)
+		header := trb.NewHeader(trlist, round.Last_Key_Block, round.IP, round.PublicKey)
+		trblock := trb.NewKeyBlock(trlist, header)
 		round.transaction_pool = round.transaction_pool[trblock.TransactionList.TxCnt:]
 		return trblock, nil
 	} else {
-		return *new(BitCoSi.TrBlock), errors.New("no transaction available")
+		return *new(BitCoSi.KeyBlock), errors.New("no transaction available")
 	}
 
 }
 
 func init() {
-	sign.RegisterRoundFactory(RoundPrepareType,
+	sign.RegisterRoundFactory(RoundKeyPrepareType,
 		func(node *sign.Node) sign.Round {
-			return NewRoundPrepare(node)
+			return NewRoundKeyPrepare(node)
 		})
 }
 
-func NewRoundPrepare(node *sign.Node) *RoundPrepare {
+func NewRoundKeyPrepare(node *sign.Node) *RoundKeyPrepare {
 	dbg.Lvlf3("Making new roundprepare")
-	round := &RoundPrepare{}
+	round := &RoundKeyPrepare{}
 	round.StampListener = NewStampListener(node.Name(), true)
 	round.RoundException = sign.NewRoundException(node)
-	round.Type = RoundPrepareType
+	round.Type = RoundKeyPrepareType
 	return round
 }
 
 // Announcement is alrGeady defined in RoundCoSi
 
-func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.SigningMessage) error {
+func (round *RoundKeyPrepare) Commitment(in []*sign.SigningMessage, out *sign.SigningMessage) error {
 	if round.IsRoot {
 
 		round.trmux.Lock()
 		//dbg.LLvl1("commit?")
 
-		trblock, err := round.getblock(10)
+		trblock, err := round.getblock(1)
 
 		round.trmux.Unlock()
 
@@ -66,7 +66,7 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 			dbg.LLvl1(err)
 			return nil
 		}
-		round.TempBlock = trblock
+		round.TempKeyBlock = trblock
 
 		dbg.LLvl1("block is for root", trblock.HeaderHash)
 
@@ -80,13 +80,13 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 	return nil
 }
 
-func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.SigningMessage) error {
+func (round *RoundKeyPrepare) Challenge(in *sign.SigningMessage, out []*sign.SigningMessage) error {
 	if round.IsRoot {
 		round.bmux.Lock()
 
 		for _, o := range out {
 			var err error
-			o.Chm.Message, err = json.Marshal(round.TempBlock)
+			o.Chm.Message, err = json.Marshal(round.TempKeyBlock)
 			if err != nil {
 
 				dbg.Fatal("Problem sending TrBlock")
@@ -99,12 +99,12 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 
 	} else {
 		if len(in.Chm.Message) > 0 { //can i poll this?
-			if err := json.Unmarshal(in.Chm.Message, &round.TempBlock); err != nil {
+			if err := json.Unmarshal(in.Chm.Message, &round.TempKeyBlock); err != nil {
 
 				dbg.Fatal("Problem parsing TrBlock")
 			} else {
 
-				dbg.Lvl1("peer got the block", round.TempBlock.HeaderHash)
+				dbg.Lvl1("peer got the block", round.TempKeyBlock.HeaderHash)
 
 			}
 
@@ -116,18 +116,17 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 	return nil
 }
 
-func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.SigningMessage) error {
+func (round *RoundKeyPrepare) Response(in []*sign.SigningMessage, out *sign.SigningMessage) error {
 	dbg.LLvl1("response?")
 	//fix so that it does note enter when there is no new block
 
 	if !round.IsRoot {
-		round.TempBlock.Print()
-		if round.verify_and_store(round.TempBlock) {
+		if round.verify_and_store(round.TempKeyBlock) {
 			//round.Last_Block = round.TempBlock.HeaderHash //this should be done in round commit challenge phase
-			dbg.LLvlf3("Block Accepted ", round.TempBlock.HeaderHash)
+			dbg.LLvlf3("Block Accepted ", round.TempKeyBlock.HeaderHash)
 
 		} else {
-			dbg.LLvlf3("Block Rejected ", round.TempBlock.HeaderHash)
+			dbg.LLvlf3("Block Rejected ", round.TempKeyBlock.HeaderHash)
 			round.RoundException.RaiseException()
 		}
 
@@ -140,20 +139,17 @@ func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.Signing
 	return nil
 }
 
-func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock) bool {
-	dbg.LLvl1("block parent is", block.Header.Parent)
-	dbg.LLvl1("round parent is", round.Last_Block)
-	dbg.LLvl1("block key parent is", block.Header.ParentKey)
-	dbg.LLvl1("round parent key is", round.Last_Key_Block)
-	dbg.LLvl1("block merkle is", block.Header.MerkleRoot)
-	dbg.LLvl1("calculated merkle is", block.Calculate_root(block.TransactionList))
-	dbg.LLvl1("block hash is", block.HeaderHash)
-	dbg.LLvl1("calculated hash is", block.Hash(block.Header))
+func (round *RoundKeyPrepare) verify_and_store(block BitCoSi.KeyBlock) bool {
+	dbg.LLvl1("block key parent is %+v", block.Header.ParentKey)
+	dbg.LLvl1("round parent key is %+v", round.Last_Key_Block)
+	dbg.LLvl1("block merkle is %+v", block.Header.MerkleRoot)
+	dbg.LLvl1("calculated merkle is %+v", block.Calculate_root(block.TransactionList))
+	dbg.LLvl1("block hash is %+v", block.HeaderHash)
+	dbg.LLvl1("calculated hash is  %+v", block.Hash(block.Header))
 
-	return block.Header.Parent == round.Last_Block && block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.HeaderHash
+	return block.Header.ParentKey == round.Last_Key_Block // && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.HeaderHash
 }
-
-func (round *RoundPrepare) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
+func (round *RoundKeyPrepare) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
 
 	return nil
 }

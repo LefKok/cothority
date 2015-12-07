@@ -61,8 +61,8 @@ func Run(configFile, key string) {
 		address = addr
 	}
 	peer = NewPeer(address, conf)
-	NewStampListener(peer.Name())
 	if peer.IsRoot(0) {
+		NewStampListener(peer.Name(), false)
 		ticker := time.Tick(1500 * time.Millisecond)
 		tacker := time.Tick(8000 * time.Millisecond)
 
@@ -91,6 +91,8 @@ func Run(configFile, key string) {
 
 		}
 	} else {
+		NewStampListener(peer.Name(), true)
+
 		for {
 
 			peer.LoopRounds(RoundPrepareType, -1)

@@ -76,7 +76,7 @@ type StampListener struct {
 
 // Creates a new stamp listener one port above the
 // address given in nameP
-func NewStampListener(nameP string) *StampListener {
+func NewStampListener(nameP string, fail bool) *StampListener {
 	// listen for client requests at one port higher
 	// than the signing node
 
@@ -97,6 +97,12 @@ func NewStampListener(nameP string) *StampListener {
 		dbg.Lvl3("Creating new bitcosi-StampListener for", nameL)
 		sl.IP = net.IPv4(0, 1, 2, 3)
 		sl.PublicKey = "my_cool_key"
+		if fail {
+
+			sl.Last_Block = "1"
+			sl.Last_Key_Block = "1"
+
+		}
 		sl.Last_Block = "0"
 		sl.Last_Key_Block = "0"
 		sl.TempBlock = BitCoSi.TrBlock{}
