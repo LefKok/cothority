@@ -41,30 +41,6 @@ func (round *RoundCommit) Commitment(in []*sign.SigningMessage, out *sign.Signin
 
 	if round.IsRoot {
 
-		//TODO count exceptions and check signatures if everything is ok prepare for release else ????
-		round.Mux.Lock()
-		// messages read will now be processed
-		round.Queue[MICRO][READING], round.Queue[MICRO][PROCESSING] = round.Queue[MICRO][PROCESSING], round.Queue[MICRO][READING]
-		round.Queue[MICRO][READING] = round.Queue[MICRO][READING][:0]
-		round.ClientQueue = make([]MustReplyMessage, len(round.Queue[MICRO][PROCESSING]))
-
-		// get data from s once to avoid refetching from structure
-		round.Mux.Unlock()
-
-		dbg.LLvl1("ROUND COMMIT! commit?")
-
-		for i, q := range round.Queue[MICRO][PROCESSING] {
-			//queue[i] = q.Tsm.Treq.Val
-			round.ClientQueue[i] = q
-			dbg.LLvl1(q)
-
-			round.ClientQueue[i].Block = round.TempBlock.Block
-		}
-
-		round.bmux.Lock()
-		round.blocks = append(round.blocks, round.TempBlock)
-		round.bmux.Unlock()
-
 		out.Com.MTRoot = hashid.HashId([]byte(round.TempBlock.HeaderHash))
 		//trblock.Print()
 
@@ -79,33 +55,10 @@ func (round *RoundCommit) Challenge(in *sign.SigningMessage, out []*sign.Signing
 	dbg.LLvlf1(round.TempBlock.HeaderHash)
 	dbg.LLvlf1(round.Last_Block)
 
-	//should sent the proof of acceptance of the temp_block and peers should recieve it
-	/*if round.IsRoot {
-		round.bmux.Lock()
-		if len(round.blocks) > 0 {
-			for _, o := range out {
-				var err error
-				o.Chm.Message, err = json.Marshal(round.blocks[len(round.blocks)-1])
-				if err != nil {
+	round.Tempflag.Lock()
 
-					dbg.Fatal("Problem sending TrBlock")
-				}
-			}
-		}
-		round.bmux.Unlock()
+	//if round.proof_of_signing.SBm.verify??
 
-		//root starts roundcommit
-
-	} else {
-		if len(in.Chm.Message) > 0 { //can i poll this?
-			if err := json.Unmarshal(in.Chm.Message, &round.TempBlock); err != nil {
-
-				dbg.Fatal("Problem parsing TrBlock")
-			}
-			dbg.Lvl1("peer got the block")
-			//block.Print()
-		}
-	}*/
 	round.RoundCosi.Challenge(in, out)
 	return nil
 }
@@ -145,6 +98,30 @@ func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningM
 }
 
 func (round *RoundCommit) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
+
+	//round.proof_of_signing.SBm.verify??
+
+	round.Mux.Lock()
+	// messages read will now be processed
+	round.Queue[MICRO][READING], round.Queue[MICRO][PROCESSING] = round.Queue[MICRO][PROCESSING], round.Queue[MICRO][READING]
+	round.Queue[MICRO][READING] = round.Queue[MICRO][READING][:0]
+	round.ClientQueue = make([]MustReplyMessage, len(round.Queue[MICRO][PROCESSING]))
+
+	// get data from s once to avoid refetching from structure
+	round.Mux.Unlock()
+
+	for i, q := range round.Queue[MICRO][PROCESSING] {
+		//queue[i] = q.Tsm.Treq.Val
+		round.ClientQueue[i] = q
+
+		round.ClientQueue[i].Block = round.TempBlock.Block
+	}
+
+	round.bmux.Lock()
+	round.blocks = append(round.blocks, round.TempBlock)
+	round.bmux.Unlock()
+	//trblock.Print()
+
 	round.RoundCosi.SignatureBroadcast(in, out)
 
 	for _, msg := range round.ClientQueue {
@@ -166,6 +143,8 @@ func (round *RoundCommit) SignatureBroadcast(in *sign.SigningMessage, out []*sig
 		//dbg.Lvlf1("Sent signature response back to %+v", respMessg.Brep)
 		round.bmux.Unlock()
 	}
+	round.Tempflag.Unlock()
+
 	return nil
 }
 

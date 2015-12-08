@@ -6,6 +6,7 @@ import (
 	"github.com/dedis/cothority/lib/cliutils"
 	"github.com/dedis/cothority/lib/coconet"
 	"github.com/dedis/cothority/lib/dbg"
+	"github.com/dedis/cothority/lib/sign"
 	"net"
 	"os"
 	"strconv"
@@ -53,7 +54,7 @@ type StampListener struct {
 	//coordination between rounds
 	TempBlock  BitCoSi.TrBlock
 	Last_Block string
-	Tempflag   bool
+	Tempflag   sync.Mutex
 
 	TempKeyBlock   BitCoSi.KeyBlock
 	Last_Key_Block string
@@ -72,6 +73,8 @@ type StampListener struct {
 	// The port we're listening on
 	Port  net.Listener
 	rLock sync.Mutex
+
+	proof_of_signing sign.SigningMessage
 }
 
 // Creates a new stamp listener one port above the
@@ -107,7 +110,7 @@ func NewStampListener(nameP string, fail bool) *StampListener {
 		sl.Last_Key_Block = "0"
 		sl.TempBlock = BitCoSi.TrBlock{}
 		sl.TempKeyBlock = BitCoSi.KeyBlock{}
-		sl.Tempflag = false
+		sl.Tempflag = sync.Mutex{}
 		sl.transaction_pool = make([]blkparser.Tx, 0)
 		sl.blocks = make([]BitCoSi.TrBlock, 0)
 		sl.keyblocks = make([]BitCoSi.KeyBlock, 0)

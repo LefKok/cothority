@@ -8,6 +8,7 @@ import (
 	"github.com/dedis/cothority/lib/dbg"
 	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/cothority/lib/sign"
+	"time"
 )
 
 /*
@@ -58,7 +59,7 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 		round.trmux.Lock()
 		//dbg.LLvl1("commit?")
 
-		trblock, err := round.getblock(10)
+		trblock, err := round.getblock(10000)
 
 		round.trmux.Unlock()
 
@@ -68,7 +69,7 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 		}
 		round.TempBlock = trblock
 
-		dbg.LLvl1("block is for root", trblock.HeaderHash)
+		dbg.LLvl1("block has transactions", trblock.TransactionList.TxCnt)
 
 		out.Com.MTRoot = hashid.HashId([]byte(trblock.MerkleRoot))
 		//trblock.Print()
@@ -81,6 +82,7 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 }
 
 func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.SigningMessage) error {
+	round.Tempflag.Lock()
 	if round.IsRoot {
 		round.bmux.Lock()
 
@@ -121,10 +123,14 @@ func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.Signing
 	//fix so that it does note enter when there is no new block
 
 	if !round.IsRoot {
-		round.TempBlock.Print()
+		var n time.Duration
+		n = time.Duration(round.TempBlock.TransactionList.TxCnt) //n is in nsec sould be converted to microsec
+		dbg.LLvl1(n * 100000)
+		time.Sleep(n * 100000) //verification time od 100 microsec per transaction emulated
+		//round.TempBlock.Print()
 		if round.verify_and_store(round.TempBlock) {
 			//round.Last_Block = round.TempBlock.HeaderHash //this should be done in round commit challenge phase
-			dbg.LLvlf3("Block Accepted ", round.TempBlock.HeaderHash)
+			dbg.LLvlf3("Block Accepted ")
 
 		} else {
 			dbg.LLvlf3("Block Rejected ", round.TempBlock.HeaderHash)
@@ -141,19 +147,13 @@ func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.Signing
 }
 
 func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock) bool {
-	dbg.LLvl1("block parent is", block.Header.Parent)
-	dbg.LLvl1("round parent is", round.Last_Block)
-	dbg.LLvl1("block key parent is", block.Header.ParentKey)
-	dbg.LLvl1("round parent key is", round.Last_Key_Block)
-	dbg.LLvl1("block merkle is", block.Header.MerkleRoot)
-	dbg.LLvl1("calculated merkle is", block.Calculate_root(block.TransactionList))
-	dbg.LLvl1("block hash is", block.HeaderHash)
-	dbg.LLvl1("calculated hash is", block.Hash(block.Header))
 
 	return block.Header.Parent == round.Last_Block && block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.HeaderHash
 }
 
 func (round *RoundPrepare) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
-
+	round.RoundException.SignatureBroadcast(in, out)
+	//round.proof_of_signing.SBm = in.SBm
+	round.Tempflag.Unlock()
 	return nil
 }

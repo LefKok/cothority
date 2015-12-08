@@ -61,9 +61,12 @@ func Run(configFile, key string) {
 		address = addr
 	}
 	peer = NewPeer(address, conf)
+	NewStampListener(peer.Name(), false)
+	time.Sleep(time.Second) //give time to load transactions
+
 	if peer.IsRoot(0) {
-		NewStampListener(peer.Name(), false)
-		ticker := time.Tick(1500 * time.Millisecond)
+		//NewStampListener(peer.Name(), false)
+		ticker := time.Tick(3000 * time.Millisecond)
 		tacker := time.Tick(8000 * time.Millisecond)
 
 		for {
@@ -71,7 +74,7 @@ func Run(configFile, key string) {
 			case <-ticker:
 				lock.Lock()
 				dbg.LLvl1("Start Micro")
-				peer.StartAnnouncement(NewRoundPrepare(peer.Node))
+				go peer.StartAnnouncement(NewRoundPrepare(peer.Node))
 				//dbg.LLvl1("Start Commit")
 				peer.StartAnnouncement(NewRoundCommit(peer.Node))
 				dbg.LLvl1("Finish Micro")
@@ -91,7 +94,7 @@ func Run(configFile, key string) {
 
 		}
 	} else {
-		NewStampListener(peer.Name(), true)
+		//NewStampListener(peer.Name(), true)
 
 		for {
 

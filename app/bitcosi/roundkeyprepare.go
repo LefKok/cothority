@@ -123,7 +123,7 @@ func (round *RoundKeyPrepare) Response(in []*sign.SigningMessage, out *sign.Sign
 	if !round.IsRoot {
 		if round.verify_and_store(round.TempKeyBlock) {
 			//round.Last_Block = round.TempBlock.HeaderHash //this should be done in round commit challenge phase
-			dbg.LLvlf3("Block Accepted ", round.TempKeyBlock.HeaderHash)
+			dbg.LLvlf3("Block Accepted ")
 
 		} else {
 			dbg.LLvlf3("Block Rejected ", round.TempKeyBlock.HeaderHash)
@@ -140,14 +140,8 @@ func (round *RoundKeyPrepare) Response(in []*sign.SigningMessage, out *sign.Sign
 }
 
 func (round *RoundKeyPrepare) verify_and_store(block BitCoSi.KeyBlock) bool {
-	dbg.LLvl1("block key parent is %+v", block.Header.ParentKey)
-	dbg.LLvl1("round parent key is %+v", round.Last_Key_Block)
-	dbg.LLvl1("block merkle is %+v", block.Header.MerkleRoot)
-	dbg.LLvl1("calculated merkle is %+v", block.Calculate_root(block.TransactionList))
-	dbg.LLvl1("block hash is %+v", block.HeaderHash)
-	dbg.LLvl1("calculated hash is  %+v", block.Hash(block.Header))
 
-	return block.Header.ParentKey == round.Last_Key_Block // && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.HeaderHash
+	return block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.HeaderHash
 }
 func (round *RoundKeyPrepare) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
 
