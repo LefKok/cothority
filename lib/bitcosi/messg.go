@@ -69,7 +69,7 @@ func (sr *BlockReply) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 
-	dbg.Print("Returning helper-struct")
+	//dbg.Print("Returning helper-struct")
 	return json.Marshal(&struct {
 		SignatureInfo []byte
 		*Alias
@@ -81,7 +81,7 @@ func (sr *BlockReply) MarshalJSON() ([]byte, error) {
 
 func (sr *BlockReply) UnmarshalJSON(dataJSON []byte) error {
 	type Alias BlockReply
-	dbg.Print("Starting unmarshal")
+	//dbg.Print("Starting unmarshal")
 	suite := app.GetSuite(sr.SuiteStr)
 	aux := &struct {
 		SignatureInfo []byte
@@ -97,7 +97,7 @@ func (sr *BlockReply) UnmarshalJSON(dataJSON []byte) error {
 		AggPublic: suite.Point(),
 		Alias:     (*Alias)(sr),
 	}
-	dbg.Print("Doing JSON unmarshal")
+	//dbg.Print("Doing JSON unmarshal")
 	if err := json.Unmarshal(dataJSON, &aux); err != nil {
 		dbg.Print("Error in unmarshal:", err)
 		return err
@@ -107,7 +107,7 @@ func (sr *BlockReply) UnmarshalJSON(dataJSON []byte) error {
 		dbg.Fatal("decoding signature Response / Challenge / AggCommit: ", err)
 		return err
 	}
-	dbg.Print("Finished")
+	//dbg.Print("Finished")
 	return nil
 }
 
