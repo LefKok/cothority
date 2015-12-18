@@ -14,7 +14,9 @@ const RoundSetupType = "setup"
 
 type RoundSetup struct {
 	*RoundStruct
-	Counted chan int
+	node       *Node
+	Counted    chan int
+	Committers chan []string
 }
 
 func init() {
@@ -25,9 +27,12 @@ func init() {
 }
 
 func NewRoundSetup(node *Node) *RoundSetup {
+	dbg.Lvl3("Making new RoundSetup", node.Name())
 	round := &RoundSetup{}
 	round.RoundStruct = NewRoundStruct(node, RoundSetupType)
 	round.Counted = make(chan int, 1)
+	round.Committers = make(chan []string)
+	round.node = node
 	return round
 }
 
@@ -37,14 +42,18 @@ func (round *RoundSetup) Announcement(viewNbr, roundNbr int, in *SigningMessage,
 
 func (round *RoundSetup) Commitment(in []*SigningMessage, out *SigningMessage) error {
 	out.Com.Messages = 1
+	out.Com.Committers = make([]string, len(in)+1)
+	out.Com.Committers[0] = round.node.Name()
 	if !round.IsLeaf {
 		for _, i := range in {
 			out.Com.Messages += i.Com.Messages
+			out.Com.Committers = append(out.Com.Committers, i.Com.Committers...)
 		}
 	}
 	if round.IsRoot {
 		dbg.Lvl2("Number of nodes found:", out.Com.Messages)
 		round.Counted <- out.Com.Messages
+		round.Committers <- out.Com.Committers
 	}
 	return nil
 }

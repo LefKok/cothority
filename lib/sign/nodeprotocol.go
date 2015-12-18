@@ -6,9 +6,9 @@ import (
 	"io"
 	"sync/atomic"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/dedis/cothority/lib/coconet"
 	"github.com/dedis/cothority/lib/dbg"
+	"github.com/dedis/crypto/abstract"
 	"golang.org/x/net/context"
 	"strings"
 	"syscall"
@@ -97,7 +97,7 @@ func (sn *Node) ProcessMessages() error {
 					dbg.Lvl4(sn.Name(), "done proposing")
 				} else {
 					if !sn.IsParent(sm.ViewNbr, sm.From) {
-						log.Fatalln(sn.Name(), "received announcement from non-parent on view", sm.ViewNbr)
+						dbg.Fatal(sn.Name(), "received announcement from non-parent on view", sm.ViewNbr)
 						continue
 					}
 					err = sn.Announce(sm)
@@ -110,7 +110,7 @@ func (sn *Node) ProcessMessages() error {
 			case Commitment:
 				dbg.Lvl3(sn.Name(), "got commitment")
 				if !sn.IsChild(sm.ViewNbr, sm.From) {
-					log.Fatalln(sn.Name(), "received commitment from non-child on view", sm.ViewNbr)
+					dbg.Fatal(sn.Name(), "received commitment from non-child on view", sm.ViewNbr)
 					continue
 				}
 
@@ -126,7 +126,7 @@ func (sn *Node) ProcessMessages() error {
 			case Challenge:
 				dbg.Lvl3(sn.Name(), "got challenge")
 				if !sn.IsParent(sm.ViewNbr, sm.From) {
-					log.Fatalln(sn.Name(), "received challenge from non-parent on view", sm.ViewNbr)
+					dbg.Fatal(sn.Name(), "received challenge from non-parent on view", sm.ViewNbr)
 					continue
 				}
 				sn.ReceivedHeartbeat(sm.ViewNbr)
@@ -143,7 +143,7 @@ func (sn *Node) ProcessMessages() error {
 			case Response:
 				dbg.Lvl3(sn.Name(), "received response from", sm.From)
 				if !sn.IsChild(sm.ViewNbr, sm.From) {
-					log.Fatalln(sn.Name(), "received response from non-child on view", sm.ViewNbr)
+					dbg.Fatal(sn.Name(), "received response from non-child on view", sm.ViewNbr)
 					continue
 				}
 
@@ -206,7 +206,7 @@ func (sn *Node) ProcessMessages() error {
 					dbg.Lvl4(sn.Name(), " received addition notice")
 					sn.NewView(sm.ViewNbr, sm.From, nil, sm.Gcm.HostList)
 				} else {
-					log.Errorln(sn.Name(), "received GroupChanged for unacceptable action")
+					dbg.Error(sn.Name(), "received GroupChanged for unacceptable action")
 				}
 			case StatusConnections:
 				sn.ReceivedHeartbeat(sm.ViewNbr)
@@ -225,8 +225,9 @@ func (sn *Node) ProcessMessages() error {
 func (sn *Node) Announce(sm *SigningMessage) error {
 	view := sm.ViewNbr
 	RoundNbr := sm.RoundNbr
+	sn.nRounds = RoundNbr
 	am := sm.Am
-	dbg.Lvl4(sn.Name(), "received announcement on", view)
+	dbg.Lvl3(sn.Name(), "received announcement on", view, "Type =", am.RoundType)
 	var round Round
 	round = sn.Rounds[RoundNbr]
 	if round == nil {
@@ -269,6 +270,7 @@ func (sn *Node) Announce(sm *SigningMessage) error {
 	}
 
 	if len(sn.Children(view)) == 0 {
+		dbg.Lvl3("Leaf: Announcement done -> going Commitment")
 		// If we are a leaf, start the commit phase process
 		sn.Commit(&SigningMessage{
 			Suite:    sn.Suite().String(),
@@ -346,6 +348,7 @@ func (sn *Node) Commit(sm *SigningMessage) error {
 	}
 
 	if sn.IsRoot(view) {
+		dbg.Lvl3("Root: commitments done -> going Challenge")
 		sn.commitsDone <- roundNbr
 		err = sn.Challenge(&SigningMessage{
 			Suite:    sn.Suite().String(),
@@ -357,10 +360,14 @@ func (sn *Node) Commit(sm *SigningMessage) error {
 	} else {
 		// create and putup own commit message
 		// ctx, _ := context.WithTimeout(context.Background(), 2000*time.Millisecond)
-		dbg.Lvl4(sn.Name(), "puts up commit")
 		ctx := context.TODO()
-		dbg.Lvlf3("Out is %+v", out)
+		dbg.Lvlf5("Out is %+v", out)
 		err = sn.PutUp(ctx, view, out)
+		isErr := "(no error)"
+		if err != nil {
+			isErr = fmt.Sprintf("(error %s)", err)
+		}
+		dbg.Lvl3(sn.Name(), "puts up commit", isErr)
 	}
 	return err
 }
@@ -405,6 +412,7 @@ func (sn *Node) Challenge(sm *SigningMessage) error {
 
 	// if we are a leaf, send the respond up
 	if len(children) == 0 {
+		dbg.Lvl3("Leaf: Challenge done -> going Response")
 		sn.Respond(&SigningMessage{
 			Suite:    sn.Suite().String(),
 			Type:     Response,
@@ -497,7 +505,7 @@ func (sn *Node) Respond(sm *SigningMessage) error {
 		dbg.Lvl4(sn.Name(), "put up response to", sn.Parent(view))
 		err = sn.PutUp(ctx, view, out)
 	} else {
-		dbg.Lvl4("Root received response")
+		dbg.Lvl4("Root: response done")
 	}
 
 	if sn.TimeForViewChange() {
@@ -566,10 +574,12 @@ func (sn *Node) SignatureBroadcast(sm *SigningMessage) error {
 			ViewNbr:  view,
 			RoundNbr: RoundNbr,
 			SBm: &SignatureBroadcastMessage{
-				R0_hat: sn.suite.Secret().One(),
-				C:      sn.suite.Secret().One(),
-				X0_hat: sn.suite.Point().Null(),
-				V0_hat: sn.suite.Point().Null(),
+				R0_hat:              sn.suite.Secret().One(),
+				C:                   sn.suite.Secret().One(),
+				X0_hat:              sn.suite.Point().Null(),
+				V0_hat:              sn.suite.Point().Null(),
+				RejectionPublicList: make([]abstract.Point, 0),
+				RejectionCommitList: make([]abstract.Point, 0),
 			},
 		}
 	}

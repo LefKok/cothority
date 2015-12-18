@@ -68,13 +68,13 @@ func (round *RoundKeyPrepare) Commitment(in []*sign.SigningMessage, out *sign.Si
 		}
 		round.TempKeyBlock = trblock
 
-		dbg.LLvl1("block is for root", trblock.HeaderHash)
+		//dbg.LLvl1("block is for root", trblock.HeaderHash)
 
 		out.Com.MTRoot = hashid.HashId([]byte(trblock.MerkleRoot))
 		//trblock.Print()
 
 	}
-	dbg.Lvlf3("Commit roundprepare ")
+	dbg.Lvl3("Commit roundprepare ")
 
 	round.RoundException.Commitment(in, out)
 	return nil
@@ -104,20 +104,18 @@ func (round *RoundKeyPrepare) Challenge(in *sign.SigningMessage, out []*sign.Sig
 				dbg.Fatal("Problem parsing TrBlock")
 			} else {
 
-				dbg.Lvl1("peer got the block", round.TempKeyBlock.HeaderHash)
+				//dbg.Lvl1("peer got the block", round.TempKeyBlock.HeaderHash)
 
 			}
 
 		}
 	}
-	dbg.Lvlf3("Challenge roundprepare ")
 
 	round.RoundException.Challenge(in, out)
 	return nil
 }
 
 func (round *RoundKeyPrepare) Response(in []*sign.SigningMessage, out *sign.SigningMessage) error {
-	dbg.LLvl1("response?")
 	//fix so that it does note enter when there is no new block
 
 	if !round.IsRoot {

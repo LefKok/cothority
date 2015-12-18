@@ -16,7 +16,7 @@ type RoundStamperListener struct {
 	*StampListener
 	*RoundStamper
 	ClientQueue   []ReplyMessage
-	roundMessages int
+	RoundMessages int
 }
 
 type ReplyMessage struct {
@@ -33,7 +33,7 @@ func init() {
 }
 
 func NewRoundStamperListener(node *sign.Node) *RoundStamperListener {
-	dbg.Lvlf3("Making new roundStamperListener %+v", node)
+	dbg.Lvl3("Making new RoundStamperListener", node.Name())
 	round := &RoundStamperListener{}
 	round.StampListener = NewStampListener(node.Name())
 	round.RoundStamper = NewRoundStamper(node)
@@ -53,10 +53,8 @@ func (round *RoundStamperListener) Commitment(in []*sign.SigningMessage, out *si
 	for _, m := range in {
 		out.Com.Messages += m.Com.Messages
 	}
-	if round.IsRoot {
-		round.roundMessages = out.Com.Messages
-		round.Node.Messages += out.Com.Messages
-	}
+	round.RoundMessages = out.Com.Messages
+	round.Node.Messages += out.Com.Messages
 
 	round.ClientQueue = make([]ReplyMessage, msgs)
 	queue := make([][]byte, len(round.Queue[PROCESSING]))
@@ -83,7 +81,9 @@ func (round *RoundStamperListener) Commitment(in []*sign.SigningMessage, out *si
 func (round *RoundStamperListener) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
 	round.RoundStamper.SignatureBroadcast(in, out)
 	if round.IsRoot {
-		in.SBm.Messages = round.roundMessages
+		in.SBm.Messages = round.Node.Messages
+	} else {
+		round.Node.Messages = in.SBm.Messages
 	}
 	for _, o := range out {
 		o.SBm.Messages = in.SBm.Messages
@@ -93,14 +93,16 @@ func (round *RoundStamperListener) SignatureBroadcast(in *sign.SigningMessage, o
 			Type:  StampSignatureType,
 			ReqNo: SeqNo(msg.ReqNo),
 			Srep: &StampSignature{
-				SuiteStr:   round.Suite.String(),
-				Timestamp:  round.Timestamp,
-				MerkleRoot: round.MTRoot,
-				Prf:        round.RoundStamper.CombProofs[i],
-				Response:   in.SBm.R0_hat,
-				Challenge:  in.SBm.C,
-				AggCommit:  in.SBm.V0_hat,
-				AggPublic:  in.SBm.X0_hat,
+				SuiteStr:            round.Suite.String(),
+				Timestamp:           round.Timestamp,
+				MerkleRoot:          round.MTRoot,
+				Prf:                 round.RoundStamper.CombProofs[i],
+				Response:            in.SBm.R0_hat,
+				Challenge:           in.SBm.C,
+				AggCommit:           in.SBm.V0_hat,
+				AggPublic:           in.SBm.X0_hat,
+				RejectionPublicList: in.SBm.RejectionPublicList,
+				RejectionCommitList: in.SBm.RejectionCommitList,
 			}}
 		round.PutToClient(msg.To, respMessg)
 		dbg.Lvl2("Sent signature response back to client", msg.To)

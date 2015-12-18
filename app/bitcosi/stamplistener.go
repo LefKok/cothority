@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 )
 
 const (
@@ -75,6 +76,7 @@ type StampListener struct {
 	rLock sync.Mutex
 
 	proof_of_signing sign.SigningMessage
+	time             time.Time
 }
 
 // Creates a new stamp listener one port above the
@@ -180,14 +182,14 @@ func (s *StampListener) ListenRequests() error {
 							dbg.Lvlf1("Message of unknown type: %v\n", tsm.Type)
 						case BitCoSi.BlockRequestType:
 							s.Mux.Lock()
-							dbg.Lvlf1("BlockRequest: %v\n", tsm.Type)
+							//dbg.Lvlf1("BlockRequest: %v\n", tsm.Type)
 							READING := s.READING
 							s.Queue[MICRO][READING] = append(s.Queue[MICRO][READING],
 								MustReplyMessage{Tsm: tsm, To: co.Name()})
 							s.Mux.Unlock()
 						case BitCoSi.KeyBlockRequestType:
 							s.Mux.Lock()
-							dbg.Lvlf1("KeyBlockRequest: %v\n", tsm.Type)
+							//dbg.Lvlf1("KeyBlockRequest: %v\n", tsm.Type)
 							READING_KEY := s.READING_KEY
 							s.Queue[KEY][READING_KEY] = append(s.Queue[KEY][READING_KEY],
 								MustReplyMessage{Tsm: tsm, To: co.Name()})
@@ -195,7 +197,7 @@ func (s *StampListener) ListenRequests() error {
 
 						case BitCoSi.TransactionAnnouncmentType:
 							s.trmux.Lock()
-							dbg.Lvl2("Got a transaction to sign %+v ", tsm.Treq.Val)
+							//dbg.Lvl2("Got a transaction to sign %+v ", tsm.Treq.Val)
 
 							s.transaction_pool = append(s.transaction_pool, tsm.Treq.Val)
 							s.trmux.Unlock()

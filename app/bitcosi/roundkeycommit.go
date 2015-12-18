@@ -51,8 +51,6 @@ func (round *RoundKeyCommit) Commitment(in []*sign.SigningMessage, out *sign.Sig
 		// get data from s once to avoid refetching from structure
 		round.Mux.Unlock()
 
-		dbg.LLvl1("ROUND COMMIT! commit?")
-
 		for i, q := range round.Queue[KEY][PROCESSING] {
 			//queue[i] = q.Tsm.Treq.Val
 			round.ClientQueue[i] = q
@@ -111,7 +109,6 @@ func (round *RoundKeyCommit) Challenge(in *sign.SigningMessage, out []*sign.Sign
 }
 
 func (round *RoundKeyCommit) Response(in []*sign.SigningMessage, out *sign.SigningMessage) error {
-	dbg.LLvl1("response in commit?")
 	//fix so that it does note enter when there is no new block
 	//check the proof of acceptance and sign.
 

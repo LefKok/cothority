@@ -24,6 +24,24 @@ type MustReplyMessage struct {
 	To  string // name of reply destination
 }
 
+type TimeStampMessage struct {
+	ReqNo SeqNo // Request sequence number
+	// ErrorReply *ErrorReply // Generic error reply to any request
+	Type MessageType
+	Sreq *StampRequest
+	Srep *StampSignature
+}
+
+func (tsm TimeStampMessage) MarshalBinary() ([]byte, error) {
+	dbg.Fatal("Don't want to do that")
+	return nil, nil
+}
+
+func (sm *TimeStampMessage) UnmarshalBinary(data []byte) error {
+	dbg.Fatal("Don't want to do that")
+	return nil
+}
+
 // Default port for the conode-setup - the stamping-request port
 // is at ```DefaultPort + 1```
 var DefaultPort int = 2000
@@ -48,14 +66,16 @@ type StampRequest struct {
 // somehow. We could just simply add it as a field and not (un)marhsal it
 // We'd just make sure that the suite is setup before unmarshaling.
 type StampSignature struct {
-	SuiteStr   string
-	Timestamp  int64           // The timestamp requested for the file
-	MerkleRoot []byte          // root of the merkle tree
-	Prf        proof.Proof     // Merkle proof for the value sent to be stamped
-	Response   abstract.Secret // Aggregate response
-	Challenge  abstract.Secret // Aggregate challenge
-	AggCommit  abstract.Point  // Aggregate commitment key
-	AggPublic  abstract.Point  // Aggregate public key (use for easy troubleshooting)
+	SuiteStr            string
+	Timestamp           int64            // The timestamp requested for the file
+	MerkleRoot          []byte           // root of the merkle tree
+	Prf                 proof.Proof      // Merkle proof for the value sent to be stamped
+	Response            abstract.Secret  // Aggregate response
+	Challenge           abstract.Secret  // Aggregate challenge
+	AggCommit           abstract.Point   // Aggregate commitment key
+	AggPublic           abstract.Point   // Aggregate public key (use for easy troubleshooting)
+	RejectionPublicList []abstract.Point // The list of Long term public keys for nodes that rejected signatures.
+	RejectionCommitList []abstract.Point // THe list of commitment keys for nodes that rejected signatures
 }
 
 func (Sreq StampRequest) MarshalBinary() ([]byte, error) {
@@ -68,45 +88,53 @@ func (Sreq *StampRequest) UnmarshalBinary(data []byte) error {
 }
 
 func (sr *StampSignature) MarshalJSON() ([]byte, error) {
-	type Alias StampSignature
 	var b bytes.Buffer
 	suite := app.GetSuite(sr.SuiteStr)
-	if err := suite.Write(&b, sr.Response, sr.Challenge, sr.AggCommit, sr.AggPublic); err != nil {
+	if err := suite.Write(&b, sr.Response, sr.Challenge, sr.AggCommit, sr.AggPublic,
+		sr.RejectionPublicList, sr.RejectionCommitList); err != nil {
 		dbg.Lvl1("encoding stampreply response/challenge/AggCommit:", err)
 		return nil, err
 	}
 
 	return json.Marshal(&struct {
-		BinaryBlob []byte
-		*Alias
+		BinaryBlob      []byte
+		ExceptionLength int
+		Prf             proof.Proof
+		Timestamp       int64
+		MerkleRoot      []byte
 	}{
-		BinaryBlob: b.Bytes(),
-		Alias:      (*Alias)(sr),
+		BinaryBlob:      b.Bytes(),
+		ExceptionLength: len(sr.RejectionPublicList),
+		Prf:             sr.Prf,
+		Timestamp:       sr.Timestamp,
+		MerkleRoot:      sr.MerkleRoot,
 	})
 }
 
 func (sr *StampSignature) UnmarshalJSON(dataJSON []byte) error {
-	type Alias StampSignature
 	suite := app.GetSuite(sr.SuiteStr)
 	aux := &struct {
-		BinaryBlob []byte
-		Response   abstract.Secret
-		Challenge  abstract.Secret
-		AggCommit  abstract.Point
-		AggPublic  abstract.Point
-		*Alias
-	}{
-		Response:  suite.Secret(),
-		Challenge: suite.Secret(),
-		AggCommit: suite.Point(),
-		AggPublic: suite.Point(),
-		Alias:     (*Alias)(sr),
-	}
+		BinaryBlob      []byte
+		ExceptionLength int
+		Prf             proof.Proof
+		Timestamp       int64
+		MerkleRoot      []byte
+	}{}
+
 	if err := json.Unmarshal(dataJSON, &aux); err != nil {
 		return err
 	}
+	sr.RejectionPublicList = make([]abstract.Point, aux.ExceptionLength)
+	sr.RejectionCommitList = make([]abstract.Point, aux.ExceptionLength)
+	sr.Response = suite.Secret()
+	sr.Challenge = suite.Secret()
+	sr.AggCommit = suite.Point()
+	sr.AggPublic = suite.Point()
+	sr.Prf = aux.Prf
+	sr.Timestamp = aux.Timestamp
+	sr.MerkleRoot = aux.MerkleRoot
 	if err := suite.Read(bytes.NewReader(aux.BinaryBlob), &sr.Response,
-		&sr.Challenge, &sr.AggCommit, &sr.AggPublic); err != nil {
+		&sr.Challenge, &sr.AggCommit, &sr.AggPublic, &sr.RejectionPublicList, &sr.RejectionCommitList); err != nil {
 		dbg.Fatal("decoding signature Response / Challenge / AggCommit:", err)
 		return err
 	}
@@ -218,23 +246,5 @@ func (Sreq StampSignature) MarshalBinary() ([]byte, error) {
 }
 func (Sreq *StampSignature) UnmarshalBinary(data []byte) error {
 	dbg.Fatal("Don't want to do UnarmsahlBinary on StampReply")
-	return nil
-}
-
-type TimeStampMessage struct {
-	ReqNo SeqNo // Request sequence number
-	// ErrorReply *ErrorReply // Generic error reply to any request
-	Type MessageType
-	Sreq *StampRequest
-	Srep *StampSignature
-}
-
-func (tsm TimeStampMessage) MarshalBinary() ([]byte, error) {
-	dbg.Fatal("Don't want to do that")
-	return nil, nil
-}
-
-func (sm *TimeStampMessage) UnmarshalBinary(data []byte) error {
-	dbg.Fatal("Don't want to do that")
 	return nil
 }

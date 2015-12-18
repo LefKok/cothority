@@ -7,6 +7,7 @@ import (
 	"github.com/dedis/cothority/lib/dbg"
 	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/cothority/lib/sign"
+	"time"
 )
 
 /*
@@ -52,8 +53,8 @@ func (round *RoundCommit) Commitment(in []*sign.SigningMessage, out *sign.Signin
 
 func (round *RoundCommit) Challenge(in *sign.SigningMessage, out []*sign.SigningMessage) error {
 
-	dbg.LLvlf1(round.TempBlock.HeaderHash)
-	dbg.LLvlf1(round.Last_Block)
+	//dbg.LLvlf1(round.TempBlock.HeaderHash)
+	//dbg.LLvlf1(round.Last_Block)
 
 	round.Tempflag.Lock()
 
@@ -64,7 +65,7 @@ func (round *RoundCommit) Challenge(in *sign.SigningMessage, out []*sign.Signing
 }
 
 func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningMessage) error {
-	dbg.LLvl1("response in commit?")
+	//dbg.LLvl1("response in commit?")
 	//fix so that it does note enter when there is no new block
 	//check the proof of acceptance and sign.
 
@@ -100,6 +101,10 @@ func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningM
 func (round *RoundCommit) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
 
 	//round.proof_of_signing.SBm.verify??
+	if round.IsRoot {
+		elapsed := time.Since(round.StampListener.time)
+		dbg.Lvl1("time \t", elapsed)
+	}
 
 	round.Mux.Lock()
 	// messages read will now be processed
@@ -126,7 +131,7 @@ func (round *RoundCommit) SignatureBroadcast(in *sign.SigningMessage, out []*sig
 
 	for _, msg := range round.ClientQueue {
 		round.bmux.Lock()
-		dbg.LLvl1(msg.Block.HeaderHash)
+		dbg.Lvl3(msg.Block.HeaderHash)
 		respMessg := &BitCoSi.BitCoSiMessage{
 			Type:  BitCoSi.BlockReplyType,
 			ReqNo: msg.Tsm.ReqNo,

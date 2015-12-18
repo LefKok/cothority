@@ -87,7 +87,7 @@ func (s *StampListener) ListenRequests() error {
 
 	go func() {
 		for {
-			dbg.Lvlf2("Listening to sign-requests: %p", s)
+			dbg.Lvlf2("Listening to stamp-requests on %s", s.NameL)
 			conn, err := s.Port.Accept()
 			if err != nil {
 				// handle error
@@ -113,7 +113,7 @@ func (s *StampListener) ListenRequests() error {
 						err := co.GetData(&tsm)
 						dbg.Lvlf2("Got data to sign %+v - %+v", tsm, tsm.Sreq)
 						if err != nil {
-							dbg.Lvlf1("%p Failed to get from child: %s", s.NameL, err)
+							dbg.Lvlf1("%s Failed to get from child: %s", s.NameL, err)
 							co.Close()
 							return
 						}

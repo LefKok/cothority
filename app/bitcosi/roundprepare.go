@@ -8,6 +8,7 @@ import (
 	"github.com/dedis/cothority/lib/dbg"
 	"github.com/dedis/cothority/lib/hashid"
 	"github.com/dedis/cothority/lib/sign"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,8 @@ const RoundPrepareType = "prepare"
 type RoundPrepare struct {
 	*StampListener
 	*sign.RoundException
+	verified          bool
+	verification_lock sync.Mutex
 }
 
 func (round *RoundPrepare) getblock(n int) (trb BitCoSi.TrBlock, _ error) {
@@ -48,18 +51,22 @@ func NewRoundPrepare(node *sign.Node) *RoundPrepare {
 	round.StampListener = NewStampListener(node.Name(), true)
 	round.RoundException = sign.NewRoundException(node)
 	round.Type = RoundPrepareType
+	round.verified = false
+	round.verification_lock = sync.Mutex{}
 	return round
 }
 
-// Announcement is alrGeady defined in RoundCoSi
+// Announcement is already defined in RoundCoSi
 
 func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.SigningMessage) error {
 	if round.IsRoot {
 
 		round.trmux.Lock()
+
 		//dbg.LLvl1("commit?")
 
-		trblock, err := round.getblock(10000)
+		trblock, err := round.getblock(4681)
+		round.StampListener.time = time.Now()
 
 		round.trmux.Unlock()
 
@@ -69,19 +76,20 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 		}
 		round.TempBlock = trblock
 
-		dbg.LLvl1("block has transactions", trblock.TransactionList.TxCnt)
+		//dbg.LLvl1("block has transactions", trblock.TransactionList.TxCnt)
 
 		out.Com.MTRoot = hashid.HashId([]byte(trblock.MerkleRoot))
 		//trblock.Print()
 
 	}
-	dbg.Lvlf3("Commit roundprepare ")
+	dbg.Lvl3("Commit roundprepare ")
 
 	round.RoundException.Commitment(in, out)
 	return nil
 }
 
 func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.SigningMessage) error {
+
 	round.Tempflag.Lock()
 	if round.IsRoot {
 		round.bmux.Lock()
@@ -89,6 +97,7 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 		for _, o := range out {
 			var err error
 			o.Chm.Message, err = json.Marshal(round.TempBlock)
+			dbg.LLvl1(len(o.Chm.Message))
 			if err != nil {
 
 				dbg.Fatal("Problem sending TrBlock")
@@ -106,36 +115,50 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 				dbg.Fatal("Problem parsing TrBlock")
 			} else {
 
-				dbg.Lvl1("peer got the block", round.TempBlock.HeaderHash)
+				dbg.Lvl3("peer got the block", round.TempBlock.HeaderHash)
 
 			}
 
+			round.verification_lock.Lock()
+			go round.verify_and_store(round.TempBlock)
+			round.bmux.Lock()
+
+			for _, o := range out {
+				var err error
+				o.Chm.Message, err = json.Marshal(round.TempBlock)
+				if err != nil {
+
+					dbg.Fatal("Problem sending TrBlock")
+				}
+			}
+
+			round.bmux.Unlock()
+
 		}
 	}
-	dbg.Lvlf3("Challenge roundprepare ")
+	dbg.Lvl3("Challenge roundprepare ")
 
 	round.RoundException.Challenge(in, out)
 	return nil
 }
 
 func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.SigningMessage) error {
-	dbg.LLvl1("response?")
+	//dbg.LLvl1("response?")
 	//fix so that it does note enter when there is no new block
+	//dbg.Lvl1("got in response", round.NameL)
 
 	if !round.IsRoot {
-		var n time.Duration
-		n = time.Duration(round.TempBlock.TransactionList.TxCnt) //n is in nsec sould be converted to microsec
-		dbg.LLvl1(n * 100000)
-		time.Sleep(n * 100000) //verification time od 100 microsec per transaction emulated
-		//round.TempBlock.Print()
-		if round.verify_and_store(round.TempBlock) {
+		round.verification_lock.Lock()
+
+		if round.verified {
 			//round.Last_Block = round.TempBlock.HeaderHash //this should be done in round commit challenge phase
-			dbg.LLvlf3("Block Accepted ")
+			//dbg.LLvl3("Block Accepted ")
 
 		} else {
 			dbg.LLvlf3("Block Rejected ", round.TempBlock.HeaderHash)
 			round.RoundException.RaiseException()
 		}
+		round.verification_lock.Unlock()
 
 	}
 	round.RoundException.Response(in, out)
@@ -146,9 +169,18 @@ func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.Signing
 	return nil
 }
 
-func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock) bool {
+func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock) error {
+	var n time.Duration
+	n = time.Duration(round.TempBlock.TransactionList.TxCnt) //the transaction are very small at the begining (only 180 bytes of size).
+	// Now the average block verification delays is 174ms for an average block of 350KB.
+	//To simulate the verification cost of these transactions we say that we have 2ms per KB which is 0.3msec per simluated transaction
+	//dbg.Lvl1(n * 300000)
+	time.Sleep(n * 300000) //verification time od 300 microsec per transaction emulated
+	//round.TempBlock.Print()
 
-	return block.Header.Parent == round.Last_Block && block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.HeaderHash
+	round.verified = block.Header.Parent == round.Last_Block && block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.HeaderHash
+	round.verification_lock.Unlock()
+	return nil
 }
 
 func (round *RoundPrepare) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
