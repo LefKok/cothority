@@ -57,6 +57,8 @@ type StampListener struct {
 	Last_Block string
 	Tempflag   sync.Mutex
 
+	Commitround *sign.SignatureBroadcastMessage
+
 	TempKeyBlock   BitCoSi.KeyBlock
 	Last_Key_Block string
 
@@ -182,7 +184,7 @@ func (s *StampListener) ListenRequests() error {
 							dbg.Lvlf1("Message of unknown type: %v\n", tsm.Type)
 						case BitCoSi.BlockRequestType:
 							s.Mux.Lock()
-							//dbg.Lvlf1("BlockRequest: %v\n", tsm.Type)
+							dbg.Lvlf1("BlockRequest: %v\n", tsm.Type)
 							READING := s.READING
 							s.Queue[MICRO][READING] = append(s.Queue[MICRO][READING],
 								MustReplyMessage{Tsm: tsm, To: co.Name()})
@@ -197,7 +199,7 @@ func (s *StampListener) ListenRequests() error {
 
 						case BitCoSi.TransactionAnnouncmentType:
 							s.trmux.Lock()
-							//dbg.Lvl2("Got a transaction to sign %+v ", tsm.Treq.Val)
+							dbg.Lvl1("Got a transaction to sign %+v ", tsm.Treq.Val)
 
 							s.transaction_pool = append(s.transaction_pool, tsm.Treq.Val)
 							s.trmux.Unlock()

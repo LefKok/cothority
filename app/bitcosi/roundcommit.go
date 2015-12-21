@@ -18,7 +18,7 @@ const RoundCommitType = "commit"
 
 type RoundCommit struct {
 	*StampListener
-	*sign.RoundCosi
+	*sign.RoundException
 	ClientQueue []MustReplyMessage
 }
 
@@ -33,7 +33,7 @@ func NewRoundCommit(node *sign.Node) *RoundCommit {
 	dbg.Lvlf3("Making new roundcommit %+v", node)
 	round := &RoundCommit{}
 	round.StampListener = NewStampListener(node.Name(), true)
-	round.RoundCosi = sign.NewRoundCosi(node)
+	round.RoundException = sign.NewRoundException(node)
 	round.Type = RoundCommitType
 	return round
 }
@@ -47,7 +47,7 @@ func (round *RoundCommit) Commitment(in []*sign.SigningMessage, out *sign.Signin
 
 	}
 
-	round.RoundCosi.Commitment(in, out)
+	round.RoundException.Commitment(in, out)
 	return nil
 }
 
@@ -58,9 +58,11 @@ func (round *RoundCommit) Challenge(in *sign.SigningMessage, out []*sign.Signing
 
 	round.Tempflag.Lock()
 
-	//if round.proof_of_signing.SBm.verify??
+	if !round.verify_and_store(*round.proof_of_signing.SBm) {
+		round.RoundException.RaiseException()
+	}
 
-	round.RoundCosi.Challenge(in, out)
+	round.RoundException.Challenge(in, out)
 	return nil
 }
 
@@ -73,24 +75,24 @@ func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningM
 		/*if round.verify_and_store(round.TempBlock) {
 			round.Last_Block = round.TempBlock.HeaderHash //this should be done in round commit challenge phase
 			dbg.LLvlf3("Block Accepted %+v", round.TempBlock.HeaderHash)
-			round.RoundCosi.Response(in, out)
+			round.RoundException.Response(in, out)
 
 		} else {
 
 			dbg.LLvlf3("Block Rejected %+v", round.TempBlock.HeaderHash)
 			round.Cosi.R_hat = round.Suite.Secret().Zero()
-			round.RoundCosi.Response(in, out)
+			round.RoundException.Response(in, out)
 			dbg.LLvl3(out.Rm.ExceptionX_hat)
 			out.Rm.ExceptionX_hat.Add(out.Rm.ExceptionX_hat, round.Cosi.PubKey)
 			out.Rm.ExceptionV_hat.Add(out.Rm.ExceptionV_hat, round.Cosi.Log.V_hat)
 		}*/
 		round.Last_Block = round.TempBlock.HeaderHash
 
-		round.RoundCosi.Response(in, out) //delete
+		round.RoundException.Response(in, out) //delete
 	} else {
 		round.Last_Block = round.TempBlock.HeaderHash
 
-		round.RoundCosi.Response(in, out)
+		round.RoundException.Response(in, out)
 	}
 
 	//roots puts aggregated signature respose in a hash table in the stamplistener. The listener pools tha hash table in the round_commit challenge phase before continuing/// how can i make the other nodes to w8 in the challenge??
@@ -127,7 +129,7 @@ func (round *RoundCommit) SignatureBroadcast(in *sign.SigningMessage, out []*sig
 	round.bmux.Unlock()
 	//trblock.Print()
 
-	round.RoundCosi.SignatureBroadcast(in, out)
+	round.RoundException.SignatureBroadcast(in, out)
 
 	for _, msg := range round.ClientQueue {
 		round.bmux.Lock()
@@ -138,8 +140,8 @@ func (round *RoundCommit) SignatureBroadcast(in *sign.SigningMessage, out []*sig
 			Brep: &BitCoSi.BlockReply{
 				SuiteStr:   suite.String(),
 				Block:      msg.Block,
-				MerkleRoot: round.RoundCosi.Cosi.MTRoot,
-				Prf:        round.RoundCosi.Cosi.Proof,
+				MerkleRoot: round.RoundException.Cosi.MTRoot,
+				Prf:        round.RoundException.Cosi.Proof,
 				Response:   in.SBm.R0_hat,
 				Challenge:  in.SBm.C,
 				AggCommit:  in.SBm.V0_hat,
@@ -148,6 +150,8 @@ func (round *RoundCommit) SignatureBroadcast(in *sign.SigningMessage, out []*sig
 		//dbg.Lvlf1("Sent signature response back to %+v", respMessg.Brep)
 		round.bmux.Unlock()
 	}
+
+	round.Commitround = in.SBm
 	round.Tempflag.Unlock()
 
 	return nil
@@ -165,16 +169,7 @@ func (round *RoundCommit) PutToClient(name string, data coconet.BinaryMarshaler)
 	}
 }
 
-func (round *RoundCommit) verify_and_store(block BitCoSi.TrBlock) bool {
-	dbg.LLvl1("block parent is", block.Header.Parent)
-	dbg.LLvl1("round parent is", round.Last_Block)
-	dbg.LLvl1("block key parent is", block.Header.ParentKey)
-	dbg.LLvl1("round parent key is", round.Last_Key_Block)
-	dbg.LLvl1("block merkle is", block.Header.MerkleRoot)
-	dbg.LLvl1("calculated merkle is", block.Calculate_root(block.TransactionList))
-	dbg.LLvl1("block hash is", block.HeaderHash)
-	dbg.LLvl1("calculated hash is", block.Hash(block.Header))
-
-	return block.Header.Parent == round.Last_Block && block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.Hash(block.Header)
-	//return false
+func (round *RoundCommit) verify_and_store(message sign.SignatureBroadcastMessage) bool {
+	//check the signature and the size of the exceptions
+	return true
 }

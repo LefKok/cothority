@@ -46,7 +46,7 @@ func init() {
 }
 
 func NewRoundPrepare(node *sign.Node) *RoundPrepare {
-	dbg.Lvlf3("Making new roundprepare")
+	dbg.Lvlf1("Making new roundprepare")
 	round := &RoundPrepare{}
 	round.StampListener = NewStampListener(node.Name(), true)
 	round.RoundException = sign.NewRoundException(node)
@@ -82,7 +82,7 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 		//trblock.Print()
 
 	}
-	dbg.Lvl3("Commit roundprepare ")
+	dbg.Lvl1("Commit roundprepare ")
 
 	round.RoundException.Commitment(in, out)
 	return nil
@@ -115,7 +115,7 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 				dbg.Fatal("Problem parsing TrBlock")
 			} else {
 
-				dbg.Lvl3("peer got the block", round.TempBlock.HeaderHash)
+				dbg.Lvl1("peer got the block", round.TempBlock.HeaderHash)
 
 			}
 
@@ -136,7 +136,7 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 
 		}
 	}
-	dbg.Lvl3("Challenge roundprepare ")
+	dbg.Lvl1("Challenge roundprepare ")
 
 	round.RoundException.Challenge(in, out)
 	return nil
@@ -151,8 +151,7 @@ func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.Signing
 		round.verification_lock.Lock()
 
 		if round.verified {
-			//round.Last_Block = round.TempBlock.HeaderHash //this should be done in round commit challenge phase
-			//dbg.LLvl3("Block Accepted ")
+			dbg.LLvl3("Block Accepted ")
 
 		} else {
 			dbg.LLvlf3("Block Rejected ", round.TempBlock.HeaderHash)
@@ -175,7 +174,8 @@ func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock) error {
 	// Now the average block verification delays is 174ms for an average block of 350KB.
 	//To simulate the verification cost of these transactions we say that we have 2ms per KB which is 0.3msec per simluated transaction
 	//dbg.Lvl1(n * 300000)
-	time.Sleep(n * 300000) //verification time od 300 microsec per transaction emulated
+
+	//time.Sleep(n * 300000) //verification time od 300 microsec per transaction emulated
 	//round.TempBlock.Print()
 
 	round.verified = block.Header.Parent == round.Last_Block && block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.HeaderHash
@@ -184,8 +184,8 @@ func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock) error {
 }
 
 func (round *RoundPrepare) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
+	round.proof_of_signing.SBm = in.SBm
 	round.RoundException.SignatureBroadcast(in, out)
-	//round.proof_of_signing.SBm = in.SBm
 	round.Tempflag.Unlock()
 	return nil
 }

@@ -5,7 +5,7 @@ import (
 	"github.com/dedis/cothority/lib/app"
 	"github.com/dedis/cothority/lib/cliutils"
 	"github.com/dedis/cothority/lib/dbg"
-	"sync"
+	//"sync"
 	"time"
 )
 
@@ -39,7 +39,7 @@ func init() {
 // Run will launch the conode server. It takes a config file and a key file
 // First parse the key + config file and then run the actual server
 func Run(configFile, key string) {
-	var lock sync.RWMutex
+	//var lock sync.RWMutex
 
 	var address string
 	// Read the global config
@@ -64,41 +64,33 @@ func Run(configFile, key string) {
 	NewStampListener(peer.Name(), false)
 	time.Sleep(1 * time.Second) //give time to load transactions
 
-	if peer.IsRoot(0) {
-		//NewStampListener(peer.Name(), false)
-		ticker := time.Tick(1000 * time.Millisecond)
-		tacker := time.Tick(10 * time.Minute)
+	//NewStampListener(peer.Name(), false)
+	ticker := time.Tick(1000 * time.Millisecond)
 
-		for {
-			select {
-			case <-ticker:
-				lock.Lock()
-				//dbg.LLvl1("Start Micro")
+	for {
+		select {
+		case <-ticker:
+			//lock.Lock()
+			//dbg.LLvl1("Start Micro")
+			if peer.IsRoot(0) {
 				peer.StartAnnouncement(NewRoundPrepare(peer.Node))
-				//dbg.LLvl1("Start Commit")
-				peer.StartAnnouncement(NewRoundCommit(peer.Node))
-				//dbg.LLvl1("Finish Micro")
-
-				lock.Unlock()
-
-			case <-tacker:
-				lock.Lock()
-				//dbg.LLvl1("Start Key")
-				peer.StartAnnouncement(NewRoundKeyPrepare(peer.Node))
-				peer.StartAnnouncement(NewRoundKeyCommit(peer.Node))
-				//dbg.LLvl1("Finish Key")
-
-				lock.Unlock()
-
+			} else {
+				peer.LoopRounds(RoundPrepareType, -1)
 			}
 
-		}
-	} else {
-		//NewStampListener(peer.Name(), true)
+			//dbg.LLvl1("Start Commit")
+			if peer.IsRoot(0) {
+				peer.StartAnnouncement(NewRoundCommit(peer.Node))
+			} else {
+				peer.LoopRounds(RoundCommitType, -1)
+			}
 
-		for {
+			//dbg.LLvl1("Finish Micro")
 
-			peer.LoopRounds(RoundPrepareType, -1)
+			//lock.Unlock()
+
 		}
+
 	}
+
 }
