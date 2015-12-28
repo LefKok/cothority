@@ -22,7 +22,7 @@ type RoundCommit struct {
 	*StampListener
 	*sign.RoundException
 	ClientQueue []MustReplyMessage
-	measure     monitor.Measure
+	measure     *monitor.Measure
 }
 
 func init() {
@@ -41,6 +41,11 @@ func NewRoundCommit(node *sign.Node) *RoundCommit {
 	return round
 }
 
+func (round *RoundCommit) Announcement(viewNbr, roundNbr int, in *sign.SigningMessage, out []*sign.SigningMessage) error {
+
+	return round.RoundException.Announcement(viewNbr, roundNbr, in, out)
+}
+
 func (round *RoundCommit) Commitment(in []*sign.SigningMessage, out *sign.SigningMessage) error {
 	round.Tempflag.Lock()
 
@@ -52,6 +57,10 @@ func (round *RoundCommit) Commitment(in []*sign.SigningMessage, out *sign.Signin
 	}
 
 	round.RoundException.Commitment(in, out)
+	//if round.IsRoot {
+	//	round.measure = monitor.NewMeasure("roundcomm")
+	//}
+
 	return nil
 }
 
@@ -59,7 +68,9 @@ func (round *RoundCommit) Challenge(in *sign.SigningMessage, out []*sign.Signing
 
 	//dbg.LLvlf1(round.TempBlock.HeaderHash)
 	//dbg.LLvlf1(round.Last_Block)
-
+	if round.IsRoot {
+		round.measure = monitor.NewMeasure("roundcomm")
+	}
 	round.RoundException.Challenge(in, out)
 	return nil
 }
@@ -93,9 +104,15 @@ func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningM
 		round.RoundException.Response(in, out)
 	}
 	if round.IsRoot {
+		round.measure.Measure()
+		dbg.Lvl1("finished comm - took", round.measure.WallTime)
+	}
+
+	if round.IsRoot {
 		elapsed := time.Since(round.StampListener.time)
 		dbg.Lvl1("time \t", elapsed)
 	}
+
 	//roots puts aggregated signature respose in a hash table in the stamplistener. The listener pools tha hash table in the round_commit challenge phase before continuing/// how can i make the other nodes to w8 in the challenge??
 
 	return nil

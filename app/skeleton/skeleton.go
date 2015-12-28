@@ -81,7 +81,7 @@ func main() {
 	}
 	if peer.IsRoot(0) {
 		node := new(Node)
-		go node.run()
+		node.run()
 	}
 	//lock.Lock()
 	peer.LoopRounds(RoundPrepareType, RoundCommitType, 20)

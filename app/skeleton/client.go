@@ -26,7 +26,7 @@ func (node *Node) run() {
 	Current.IP = net.IPv4(0, 1, 2, 3)
 	Current.PublicKey = "my_cool_key"
 	Current.Last_Block = "0"
-	Parser, _ := BitCoSi.NewParser("/home/lefteris/hi/blocks", Magic)
+	Parser, _ := BitCoSi.NewParser("/users/lefkoko/bitcosi/blocks", Magic)
 	server := "localhost:2001"
 	//	suite = app.GetSuite("25519")
 
@@ -48,8 +48,8 @@ func (node *Node) run() {
 
 	//go wait_for_blocks()
 
-	for i := 0; i < 10000; i++ {
-		Current.transaction_pool = Parser.Parse(0, 100)
+	for i := 0; i < 1000; i++ {
+		Current.transaction_pool = Parser.Parse(0, 200)
 
 		for len(Current.transaction_pool) > 0 {
 			msg := &BitCoSi.BitCoSiMessage{
@@ -68,7 +68,7 @@ func (node *Node) run() {
 	}
 
 	//wait_for_Key_blocks()
-	time.Sleep(900000 * time.Millisecond)
+	//time.Sleep(900000 * time.Millisecond)
 
 	// Asking to close the connection
 	err = conn.PutData(&BitCoSi.BitCoSiMessage{
