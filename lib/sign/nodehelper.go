@@ -310,7 +310,7 @@ func NewNode(hn coconet.Host, suite abstract.Suite, random cipher.Stream) *Node 
 	sn.Actions = make(map[int][]*Vote)
 	sn.RoundsPerView = 0
 	sn.Rounds = make(map[int]Round)
-	sn.MaxWait = 100 * time.Second
+	sn.MaxWait = 500 * time.Second
 	return sn
 }
 
@@ -339,7 +339,7 @@ func NewKeyedNode(hn coconet.Host, suite abstract.Suite, PrivKey abstract.Secret
 	sn.Actions = make(map[int][]*Vote)
 	sn.RoundsPerView = 0
 	sn.Rounds = make(map[int]Round)
-	sn.MaxWait = 50 * time.Second
+	sn.MaxWait = 100 * time.Second
 	return sn
 }
 

@@ -70,9 +70,7 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 
 		round.trmux.Lock()
 
-		//dbg.LLvl1("commit?")
-
-		trblock, err := round.getblock(8500)
+		trblock, err := round.getblock(1)
 		round.StampListener.time = time.Now()
 
 		round.trmux.Unlock()
@@ -84,7 +82,7 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 		round.TempBlock = trblock
 
 		//dbg.LLvl1("block has transactions", trblock.TransactionList.TxCnt)
-
+		//MRoot signed as proof-fo-acceptance
 		out.Com.MTRoot = hashid.HashId([]byte(trblock.MerkleRoot))
 		//trblock.Print()
 
@@ -104,7 +102,7 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 		for _, o := range out {
 			var err error
 			o.Chm.Message, err = json.Marshal(round.TempBlock)
-			dbg.Lvl1(len(o.Chm.Message))
+			//dbg.Lvl1(len(o.Chm.Message))
 			if err != nil {
 
 				dbg.Fatal("Problem sending TrBlock")
@@ -116,7 +114,7 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 		//root starts roundcommit
 
 	} else {
-		if len(in.Chm.Message) > 0 { //can i poll this?
+		if len(in.Chm.Message) > 0 {
 			if err := json.Unmarshal(in.Chm.Message, &round.TempBlock); err != nil {
 
 				dbg.Fatal("Problem parsing TrBlock")
@@ -127,9 +125,10 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 			}
 
 			round.verification_lock.Lock()
+			//start concurrent verification of the block
 			go round.verify_and_store(round.TempBlock, len(in.Chm.Message))
 			round.bmux.Lock()
-
+			//the other threads forwards the message down he tree
 			for _, o := range out {
 				var err error
 				o.Chm.Message, err = json.Marshal(round.TempBlock)
@@ -150,11 +149,10 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 }
 
 func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.SigningMessage) error {
-	//dbg.LLvl1("response?")
-	//fix so that it does note enter when there is no new block
 	//dbg.Lvl1("got in response", round.NameL)
 
 	if !round.IsRoot {
+		//wait for verification thread to finish
 		round.verification_lock.Lock()
 
 		if round.verified {
@@ -162,6 +160,7 @@ func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.Signing
 
 		} else {
 			dbg.LLvlf3("Block Rejected ", round.TempBlock.HeaderHash)
+			//add yourself into the exception list because you vote no
 			round.RoundException.RaiseException()
 		}
 		round.verification_lock.Unlock()
@@ -187,8 +186,8 @@ func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock, s int) error 
 	n = time.Duration(s / (500 * 1024))
 	time.Sleep(150 * time.Millisecond * n) //verification of 174ms per 500KB simulated
 	//round.TempBlock.Print()
-
-	round.verified = block.Header.Parent == round.Last_Block && block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.HeaderHash
+	//rerun actual verification for the block header
+	round.verified = block.Header.Parent == round.Last_Block && block.Header.ParentKey == round.Last_Key_Block && block.Header.MerkleRoot == block.Calculate_root(block.TransactionList) && block.HeaderHash == block.Hash(block.Header)
 	round.verification_lock.Unlock()
 	return nil
 }

@@ -42,7 +42,9 @@ func NewRoundCommit(node *sign.Node) *RoundCommit {
 }
 
 func (round *RoundCommit) Announcement(viewNbr, roundNbr int, in *sign.SigningMessage, out []*sign.SigningMessage) error {
-
+	if round.IsRoot {
+		round.measure = monitor.NewMeasure("roundcomm")
+	}
 	return round.RoundException.Announcement(viewNbr, roundNbr, in, out)
 }
 
@@ -50,7 +52,7 @@ func (round *RoundCommit) Commitment(in []*sign.SigningMessage, out *sign.Signin
 	round.Tempflag.Lock()
 
 	if round.IsRoot {
-
+		//sign the HeaderHash to accept the blcok
 		out.Com.MTRoot = hashid.HashId([]byte(round.TempBlock.HeaderHash))
 		//trblock.Print()
 
@@ -68,17 +70,6 @@ func (round *RoundCommit) Challenge(in *sign.SigningMessage, out []*sign.Signing
 
 	//dbg.LLvlf1(round.TempBlock.HeaderHash)
 	//dbg.LLvlf1(round.Last_Block)
-	if round.IsRoot {
-		round.measure = monitor.NewMeasure("roundcomm")
-	}
-	round.RoundException.Challenge(in, out)
-	return nil
-}
-
-func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningMessage) error {
-	//dbg.LLvl1("response in commit?")
-	//fix so that it does note enter when there is no new block
-	//check the proof of acceptance and sign.
 
 	if !round.IsRoot {
 		/*if round.verify_and_store(round.TempBlock) {
@@ -97,12 +88,24 @@ func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningM
 		}*/
 		round.Last_Block = round.TempBlock.HeaderHash
 
-		round.RoundException.Response(in, out) //delete
-	} else {
-		round.Last_Block = round.TempBlock.HeaderHash
-
-		round.RoundException.Response(in, out)
 	}
+	if round.IsRoot {
+		round.measure = monitor.NewMeasure("roundcomm")
+	}
+
+	round.RoundException.Challenge(in, out)
+	return nil
+}
+
+func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningMessage) error {
+	//dbg.LLvl1("response in commit?")
+	//fix so that it does note enter when there is no new block
+	//check the proof of acceptance and sign.
+
+	round.Last_Block = round.TempBlock.HeaderHash
+
+	round.RoundException.Response(in, out)
+
 	if round.IsRoot {
 		round.measure.Measure()
 		dbg.Lvl1("finished comm - took", round.measure.WallTime)
@@ -118,6 +121,7 @@ func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningM
 	return nil
 }
 
+//sends back the signed block to anyone that asked for it
 func (round *RoundCommit) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
 	suite = app.GetSuite("25519")
 

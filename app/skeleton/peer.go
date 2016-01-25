@@ -125,9 +125,10 @@ func (peer *Peer) LoopRounds(roundType string, roundType2 string, rounds int) {
 
 					var wg sync.WaitGroup
 					wg.Add(2)
+					//concurrent inititation of prepare and commit round
 
-					peer.ConcurrentAnnouncement(round, &wg)
-					peer.ConcurrentAnnouncement(round2, &wg)
+					go peer.ConcurrentAnnouncement(round, &wg)
+					go peer.ConcurrentAnnouncement(round2, &wg)
 					/*	if err != nil {
 						dbg.Lvl3(err)
 						time.Sleep(1 * time.Second)

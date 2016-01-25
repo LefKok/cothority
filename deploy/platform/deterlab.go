@@ -263,7 +263,7 @@ func (d *Deterlab) Deploy(rc RunConfig) error {
 		dbg.Lvl2("Total peers:", len(conf.Hosts))
 		total := deter.Machines * conf.Ppm
 		if len(conf.Hosts) != total {
-			dbg.Fatal("Only calculated", len(conf.Hosts), "out of", total, "hosts - try changing number of",
+			dbg.Lvl1("Only calculateda", len(conf.Hosts), "out of", total, "hosts - try changing number of",
 				"machines or hosts per node")
 		}
 		deter.Hostnames = conf.Hosts

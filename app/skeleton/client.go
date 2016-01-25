@@ -48,8 +48,8 @@ func (node *Node) run() {
 
 	//go wait_for_blocks()
 
-	for i := 0; i < 1000; i++ {
-		Current.transaction_pool = Parser.Parse(0, 200)
+	for i := 0; i < 10; i++ {
+		Current.transaction_pool = Parser.Parse(0, 5)
 
 		for len(Current.transaction_pool) > 0 {
 			msg := &BitCoSi.BitCoSiMessage{
