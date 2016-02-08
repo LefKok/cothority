@@ -41,15 +41,17 @@ func NewRoundCommit(node *sign.Node) *RoundCommit {
 	return round
 }
 
+//In the simple no pipeline version start measuring here
 func (round *RoundCommit) Announcement(viewNbr, roundNbr int, in *sign.SigningMessage, out []*sign.SigningMessage) error {
-	if round.IsRoot {
+	/*if round.IsRoot {
 		round.measure = monitor.NewMeasure("roundcomm")
-	}
+	}*/
 	return round.RoundException.Announcement(viewNbr, roundNbr, in, out)
 }
 
+//prepare for begining of commit round of bitcosi
 func (round *RoundCommit) Commitment(in []*sign.SigningMessage, out *sign.SigningMessage) error {
-	round.Tempflag.Lock()
+	round.Tempflag.Lock() //synchronnize with roundprepare maybe there can be a better way
 
 	if round.IsRoot {
 		//sign the HeaderHash to accept the blcok
@@ -71,7 +73,8 @@ func (round *RoundCommit) Challenge(in *sign.SigningMessage, out []*sign.Signing
 	//dbg.LLvlf1(round.TempBlock.HeaderHash)
 	//dbg.LLvlf1(round.Last_Block)
 
-	if !round.IsRoot {
+	if !round.IsRoot { //TODO verify round.proof_of_signing.SBm and also count the number of exceptions so that 2/3 of the grid have accepted
+		//propable need to be deleted since i am using round exception
 		/*if round.verify_and_store(round.TempBlock) {
 			round.Last_Block = round.TempBlock.HeaderHash //this should be done in round commit challenge phase
 			dbg.LLvlf3("Block Accepted %+v", round.TempBlock.HeaderHash)
@@ -86,7 +89,6 @@ func (round *RoundCommit) Challenge(in *sign.SigningMessage, out []*sign.Signing
 			out.Rm.ExceptionX_hat.Add(out.Rm.ExceptionX_hat, round.Cosi.PubKey)
 			out.Rm.ExceptionV_hat.Add(out.Rm.ExceptionV_hat, round.Cosi.Log.V_hat)
 		}*/
-		round.Last_Block = round.TempBlock.HeaderHash
 
 	}
 	if round.IsRoot {
@@ -102,7 +104,9 @@ func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningM
 	//fix so that it does note enter when there is no new block
 	//check the proof of acceptance and sign.
 
-	round.Last_Block = round.TempBlock.HeaderHash
+	//TODO check that verification is successfull and sign or exception
+
+	round.Last_Block = round.TempBlock.HeaderHash //If the block is accepted this makes sures that the next block proposed has this one as a parent
 
 	round.RoundException.Response(in, out)
 
@@ -110,13 +114,6 @@ func (round *RoundCommit) Response(in []*sign.SigningMessage, out *sign.SigningM
 		round.measure.Measure()
 		dbg.Lvl1("finished comm - took", round.measure.WallTime)
 	}
-
-	if round.IsRoot {
-		elapsed := time.Since(round.StampListener.time)
-		dbg.Lvl1("time \t", elapsed)
-	}
-
-	//roots puts aggregated signature respose in a hash table in the stamplistener. The listener pools tha hash table in the round_commit challenge phase before continuing/// how can i make the other nodes to w8 in the challenge??
 
 	return nil
 }

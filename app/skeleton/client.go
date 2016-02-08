@@ -30,7 +30,7 @@ func (node *Node) run() {
 	server := "localhost:2001"
 	//	suite = app.GetSuite("25519")
 
-	dbg.Lvl2("Connecting to", server)
+	dbg.Lvl1("Connecting to", server)
 	conn := coconet.NewTCPConn(server)
 	err := conn.Connect()
 	if err != nil {
@@ -48,8 +48,8 @@ func (node *Node) run() {
 
 	//go wait_for_blocks()
 
-	for i := 0; i < 10; i++ {
-		Current.transaction_pool = Parser.Parse(0, 5)
+	for i := 0; i < 1000; i++ {
+		Current.transaction_pool = Parser.Parse(0, 400)
 
 		for len(Current.transaction_pool) > 0 {
 			msg := &BitCoSi.BitCoSiMessage{

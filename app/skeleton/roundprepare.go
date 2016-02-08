@@ -27,9 +27,12 @@ type RoundPrepare struct {
 	measure           *monitor.Measure
 }
 
+/* Create a block from the transaction pool in the StampListener,
+n is number of transaction in the block*/
 func (round *RoundPrepare) getblock(n int) (trb BitCoSi.TrBlock, _ error) {
 	if len(round.transaction_pool) > 0 {
-		trlist := BitCoSi.NewTransactionList(round.transaction_pool, n)
+		trlist :=
+			BitCoSi.NewTransactionList(round.transaction_pool, n)
 		header := trb.NewHeader(trlist, round.Last_Block, round.Last_Key_Block, round.IP, round.PublicKey)
 		trblock := trb.NewTrBlock(trlist, header)
 		round.transaction_pool = round.transaction_pool[trblock.TransactionList.TxCnt:]
@@ -58,6 +61,7 @@ func NewRoundPrepare(node *sign.Node) *RoundPrepare {
 	return round
 }
 
+//Nothing done here just start measuring
 func (round *RoundPrepare) Announcement(viewNbr, roundNbr int, in *sign.SigningMessage, out []*sign.SigningMessage) error {
 	if round.IsRoot {
 		round.measure = monitor.NewMeasure("roundprep")
@@ -65,13 +69,14 @@ func (round *RoundPrepare) Announcement(viewNbr, roundNbr int, in *sign.SigningM
 	return round.RoundException.Announcement(viewNbr, roundNbr, in, out)
 }
 
+//Prepare for Commitment
 func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.SigningMessage) error {
 	if round.IsRoot {
 
 		round.trmux.Lock()
 
-		trblock, err := round.getblock(1)
-		round.StampListener.time = time.Now()
+		trblock, err := round.getblock(2200) //parse the block to be proposed
+		//round.StampListener.time = time.Now()
 
 		round.trmux.Unlock()
 
@@ -79,11 +84,11 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 			dbg.LLvl1(err)
 			return nil
 		}
-		round.TempBlock = trblock
+		round.TempBlock = trblock //add the block in the shared between rounds stamplistener so that round commit has access
 
-		//dbg.LLvl1("block has transactions", trblock.TransactionList.TxCnt)
 		//MRoot signed as proof-fo-acceptance
-		out.Com.MTRoot = hashid.HashId([]byte(trblock.MerkleRoot))
+		out.Com.MTRoot = hashid.HashId([]byte(trblock.MerkleRoot)) // add the merkel root of the transactions of the blocks
+		//as the proposed to be signed record
 		//trblock.Print()
 
 	}
@@ -93,15 +98,16 @@ func (round *RoundPrepare) Commitment(in []*sign.SigningMessage, out *sign.Signi
 	return nil
 }
 
+//Root transmits the block, witnesses verify it.
 func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.SigningMessage) error {
 
-	round.Tempflag.Lock()
+	round.Tempflag.Lock() //lock here so that roundcommit waits until rounprep is finished
 	if round.IsRoot {
 		round.bmux.Lock()
 
 		for _, o := range out {
 			var err error
-			o.Chm.Message, err = json.Marshal(round.TempBlock)
+			o.Chm.Message, err = json.Marshal(round.TempBlock) //add the block in the message to be send out
 			//dbg.Lvl1(len(o.Chm.Message))
 			if err != nil {
 
@@ -118,7 +124,7 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 			if err := json.Unmarshal(in.Chm.Message, &round.TempBlock); err != nil {
 
 				dbg.Fatal("Problem parsing TrBlock")
-			} else {
+			} else { //recieve block and put it in the shared by rounds Temblock struct in StampListener
 
 				dbg.Lvl3("peer got the block", round.TempBlock.HeaderHash)
 
@@ -126,12 +132,12 @@ func (round *RoundPrepare) Challenge(in *sign.SigningMessage, out []*sign.Signin
 
 			round.verification_lock.Lock()
 			//start concurrent verification of the block
-			go round.verify_and_store(round.TempBlock, len(in.Chm.Message))
+			go round.verify_and_store(round.TempBlock, len(in.Chm.Message)) //seperate thread verifies
 			round.bmux.Lock()
 			//the other threads forwards the message down he tree
 			for _, o := range out {
 				var err error
-				o.Chm.Message, err = json.Marshal(round.TempBlock)
+				o.Chm.Message, err = json.Marshal(round.TempBlock) //forward block to children
 				if err != nil {
 
 					dbg.Fatal("Problem sending TrBlock")
@@ -174,7 +180,6 @@ func (round *RoundPrepare) Response(in []*sign.SigningMessage, out *sign.Signing
 	}
 
 	//round.Tempflag = true
-	//roots puts aggregated signature respose in a hash table in the stamplistener. The listener pools tha hash table in the round_commit challenge phase before continuing/// how can i make the other nodes to w8 in the challenge??
 
 	return nil
 }
@@ -193,8 +198,8 @@ func (round *RoundPrepare) verify_and_store(block BitCoSi.TrBlock, s int) error 
 }
 
 func (round *RoundPrepare) SignatureBroadcast(in *sign.SigningMessage, out []*sign.SigningMessage) error {
-	round.proof_of_signing.SBm = in.SBm
+	round.proof_of_signing.SBm = in.SBm // add the signature to the shared Stamplistener so that nodes can verify that it is accepted in the commit round
 	round.RoundException.SignatureBroadcast(in, out)
-	round.Tempflag.Unlock()
+	round.Tempflag.Unlock() //synchronize with round commit to let him take over. He should already be waiting at challenge phase
 	return nil
 }
